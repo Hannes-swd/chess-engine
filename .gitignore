@@ -1,0 +1,17 @@
+# Build-Ausgaben
+build/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Externe Engines (Stockfish ~100 MB, GPL-3) werden separat heruntergeladen
+engines/
+
+# Screenshots aus --screenshot (die fertigen Bilder liegen als PNG in docs/)
+*.bmp

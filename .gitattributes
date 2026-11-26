@@ -1,0 +1,16 @@
+# Zeilenenden einheitlich speichern, beim Auschecken passend fuer das System
+* text=auto
+
+*.cpp text
+*.hpp text
+*.h text
+*.c text
+*.md text
+*.json text
+*.txt text
+CMakeLists.txt text
+*.bat text eol=crlf
+
+*.png binary
+*.ttf binary
+*.otf binary

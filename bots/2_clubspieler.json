@@ -1,0 +1,14 @@
+{
+  "name": "Clubspieler",
+  "description": "Solider Vereinsspieler (ca. 1500 Elo mit Stockfish). Nimmt sich Zeit, wenn es kompliziert wird.",
+  "engine": "auto",
+  "elo": 1500,
+  "depth": 10,
+  "movetimeMs": 300,
+  "candidates": 3,
+  "window": 40,
+  "aggression": 0,
+  "randomness": 10,
+  "pressureBlunder": 0.3,
+  "tempo": { "mode": "human", "minMs": 1000, "maxMs": 7000, "variance": 0.5 }
+}

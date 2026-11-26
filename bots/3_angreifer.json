@@ -1,0 +1,15 @@
+{
+  "name": "Angreifer",
+  "description": "Sucht Schläge und Schachs, schiebt Bauern nach vorne und zieht schnell und impulsiv.",
+  "engine": "auto",
+  "skill": 12,
+  "depth": 10,
+  "movetimeMs": 300,
+  "candidates": 5,
+  "window": 80,
+  "aggression": 0.9,
+  "randomness": 15,
+  "pressureBlunder": 0.35,
+  "weights": { "capture": 70, "check": 60, "advance": 12 },
+  "tempo": { "mode": "human", "minMs": 400, "maxMs": 3000, "variance": 0.5 }
+}

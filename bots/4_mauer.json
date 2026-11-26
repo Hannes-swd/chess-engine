@@ -1,0 +1,15 @@
+{
+  "name": "Die Mauer",
+  "description": "Spielt vorsichtig, denkt lange nach, vermeidet Abtausch und wartet auf deine Fehler.",
+  "engine": "auto",
+  "skill": 12,
+  "depth": 10,
+  "movetimeMs": 300,
+  "candidates": 5,
+  "window": 60,
+  "aggression": -0.8,
+  "randomness": 10,
+  "pressureBlunder": 0.15,
+  "weights": { "capture": 40, "check": 40, "advance": 15 },
+  "tempo": { "mode": "human", "minMs": 2000, "maxMs": 10000, "variance": 0.4 }
+}

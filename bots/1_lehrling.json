@@ -1,0 +1,15 @@
+{
+  "name": "Lehrling",
+  "description": "Für Einsteiger: denkt gemütlich nach, übersieht öfter etwas und wird in Zeitnot schnell nervös.",
+  "engine": "auto",
+  "skill": 0,
+  "depth": 4,
+  "movetimeMs": 100,
+  "candidates": 6,
+  "window": 250,
+  "aggression": 0.2,
+  "randomness": 80,
+  "blunderChance": 0.15,
+  "pressureBlunder": 0.5,
+  "tempo": { "mode": "human", "minMs": 1500, "maxMs": 9000, "variance": 0.6 }
+}

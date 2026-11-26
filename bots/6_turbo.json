@@ -1,0 +1,14 @@
+{
+  "name": "Turbo",
+  "description": "Zieht sofort – ideal zum schnellen Üben oder für Bullet. Ordentlich stark, aber ohne Geduld.",
+  "engine": "auto",
+  "skill": 14,
+  "depth": 8,
+  "movetimeMs": 80,
+  "candidates": 3,
+  "window": 40,
+  "aggression": 0.3,
+  "randomness": 20,
+  "pressureBlunder": 0.1,
+  "tempo": { "mode": "instant" }
+}

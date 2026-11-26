@@ -1,0 +1,14 @@
+{
+  "name": "Meister",
+  "description": "Volle Stockfish-Stärke. Zieht ruhig und sicher, auch in Zeitnot. Keine Gnade.",
+  "engine": "auto",
+  "skill": 20,
+  "depth": 18,
+  "movetimeMs": 1000,
+  "candidates": 1,
+  "window": 0,
+  "aggression": 0,
+  "randomness": 0,
+  "pressureBlunder": 0.02,
+  "tempo": { "mode": "human", "minMs": 500, "maxMs": 4000, "variance": 0.35 }
+}
