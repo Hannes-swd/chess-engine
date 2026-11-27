@@ -135,7 +135,132 @@ int BuiltinEngine::negamax(Position& pos, int depth, int alpha, int beta, int pl
     return best;
 }
 
+namespace {
+
+// Braucht die Partie die langsame Suche ueber Game (weil Plugins nach Zuegen eingreifen)?
+bool needsGameSearch(const Game& g) {
+    const RuleHooks& h = g.variant().hooks;
+    return !h.onMovePlayed.empty() || !h.checkGameEnd.empty() || !h.filterMoves.empty() ||
+           !g.variant().standardEndRules;
+}
+
+// Ergebnis einer beendeten Partie aus Sicht der Seite am Zug
+int outcomeScore(const Game& g, int ply) {
+    const GameOutcome out = g.outcome();
+    if (out.result == GameResult::Draw) return 0;
+    const Color winner = out.result == GameResult::WhiteWins ? Color::White : Color::Black;
+    return winner == g.position().sideToMove() ? kMate - ply : -(kMate - ply);
+}
+
+}  // namespace
+
+int BuiltinEngine::quiesceGame(Game& g, int alpha, int beta, int ply) {
+    if (checkAbort()) return 0;
+    if (g.outcome().over()) return outcomeScore(g, ply);
+    const int stand = evaluate(g.position());
+    if (ply >= 12 || stand >= beta) return stand;
+    if (stand > alpha) alpha = stand;
+    std::vector<Move> moves = g.legalMoves();
+    std::erase_if(moves, [](const Move& m) { return !(m.flags & FlagCapture) && m.promotion == NoPieceType; });
+    orderMoves(g.position(), moves);
+    for (const Move& m : moves) {
+        if (!g.play(m)) continue;
+        const int s = -quiesceGame(g, -beta, -alpha, ply + 1);
+        g.undo();
+        if (aborted_) return 0;
+        if (s >= beta) return s;
+        if (s > alpha) alpha = s;
+    }
+    return alpha;
+}
+
+int BuiltinEngine::negamaxGame(Game& g, int depth, int alpha, int beta, int ply) {
+    if (checkAbort()) return 0;
+    if (g.outcome().over()) return outcomeScore(g, ply);
+    if (depth <= 0) return quiesceGame(g, alpha, beta, ply);
+    std::vector<Move> moves = g.legalMoves();
+    if (moves.empty()) return 0;  // ohne Standardregeln: keine Zuege, aber kein Ergebnis -> neutral
+    orderMoves(g.position(), moves);
+    int best = -kInf;
+    for (const Move& m : moves) {
+        if (!g.play(m)) continue;
+        const int s = -negamaxGame(g, depth - 1, -beta, -alpha, ply + 1);
+        g.undo();
+        if (aborted_) return 0;
+        if (s > best) best = s;
+        if (s > alpha) alpha = s;
+        if (alpha >= beta) break;
+    }
+    return best == -kInf ? 0 : best;
+}
+
+SearchResult BuiltinEngine::searchGame(const Game& root, const SearchLimits& limits) {
+    SearchResult res;
+    Game g = root;
+    nodes_ = 0;
+    nodeLimit_ = limits.nodes;
+    stop_ = limits.stop;
+    aborted_ = false;
+    canAbort_ = false;
+    const auto start = std::chrono::steady_clock::now();
+    hasDeadline_ = limits.movetimeMs > 0;
+    deadline_ = start + std::chrono::milliseconds(limits.movetimeMs);
+    // Langsamer als die normale Suche (jeder Zug laeuft durch alle Plugin-Hooks): Tiefe begrenzen
+    const int maxDepth = std::min(limits.depth > 0 ? limits.depth : 3, 4);
+    const int multi = std::max(1, limits.multiPv);
+
+    std::vector<Move> rootMoves = g.legalMoves();
+    if (!limits.rootMoves.empty())
+        std::erase_if(rootMoves, [&](const Move& m) {
+            return std::find(limits.rootMoves.begin(), limits.rootMoves.end(), m) == limits.rootMoves.end();
+        });
+    res.ok = true;
+    if (rootMoves.empty()) return res;
+    orderMoves(g.position(), rootMoves);
+
+    std::vector<std::pair<Move, int>> completed;
+    int completedDepth = 0;
+    for (int d = 1; d <= maxDepth; ++d) {
+        std::vector<std::pair<Move, int>> scored;
+        for (const Move& m : rootMoves) {
+            if (!g.play(m)) continue;
+            const int s = -negamaxGame(g, d - 1, -kInf, kInf, 1);
+            g.undo();
+            if (aborted_) break;
+            scored.emplace_back(m, s);
+        }
+        if (aborted_ && !completed.empty()) break;
+        if (scored.empty()) break;
+        std::stable_sort(scored.begin(), scored.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+        completed = scored;
+        completedDepth = d;
+        canAbort_ = true;
+        std::vector<Move> reordered;
+        for (const auto& p : scored) reordered.push_back(p.first);
+        rootMoves = std::move(reordered);
+        if (aborted_ || completed.front().second > kMateBound) break;
+        if (hasDeadline_ && std::chrono::steady_clock::now() - start > (deadline_ - start) / 2) break;
+    }
+    if (completed.empty()) {
+        res.bestMove = rootMoves.front();
+        return res;
+    }
+    res.bestMove = completed.front().first;
+    for (size_t i = 0; i < completed.size() && static_cast<int>(i) < multi; ++i) {
+        ScoredMove sm;
+        sm.move = completed[i].first;
+        sm.score = toScore(completed[i].second);
+        sm.depth = completedDepth;
+        sm.pv = {sm.move};
+        res.lines.push_back(std::move(sm));
+    }
+    res.nodes = nodes_;
+    return res;
+}
+
 SearchResult BuiltinEngine::search(const Position& root, const SearchLimits& limits) {
+    if (limits.game && needsGameSearch(*limits.game) && limits.game->position().repetitionKey() == root.repetitionKey())
+        return searchGame(*limits.game, limits);
     SearchResult res;
     Position pos = root;
 

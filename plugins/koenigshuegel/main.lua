@@ -6,7 +6,7 @@ return {
     for _, sq in ipairs(hill) do
       local id, color = board:get(sq[1], sq[2])
       if id == "king" then
-        return color, "König auf dem Hügel"
+        return color, lang == "en" and "King on the hill" or "König auf dem Hügel"
       end
     end
   end,

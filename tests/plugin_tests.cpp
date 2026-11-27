@@ -4,10 +4,14 @@
 
 #include "core/fen.hpp"
 #include "core/notation.hpp"
+#include "engine/builtin_engine.hpp"
 #include "engine/engine.hpp"
 #include "plugins/lua_plugin.hpp"
 
 #include <algorithm>
+#include <future>
+#include <thread>
+#include <filesystem>
 
 using namespace chess;
 using namespace chess::plugins;
@@ -214,10 +218,13 @@ TEST_CASE(mate_in_one_plugin_has_exactly_one_solution) {
     const PluginInfo* mate = findPlugin(all, "matt_in_eins");
     CHECK(mate != nullptr);
     if (!mate) return;
+    CHECK(mate->playerStarts);
+    int black = 0;
     for (int i = 0; i < 40; ++i) {
         const Variant v = buildVariant({*mate}).variant;
         Game g(v);
-        CHECK(g.position().sideToMove() == Color::White);
+        const Color mover = g.position().sideToMove();
+        if (mover == Color::Black) ++black;
         CHECK(!g.outcome().over());
         // genau ein Mattzug
         std::vector<Move> mates, others;
@@ -231,14 +238,18 @@ TEST_CASE(mate_in_one_plugin_has_exactly_one_solution) {
         // Matt gefunden -> Weiss gewinnt
         Game win(v);
         CHECK(win.play(mates.front()));
-        CHECK(win.outcome().result == GameResult::WhiteWins);
+        CHECK(win.outcome().result == (mover == Color::White ? GameResult::WhiteWins : GameResult::BlackWins));
         CHECK(win.outcome().reason.rfind("Matt gefunden", 0) == 0);
         // anderer Zug -> Aufgabe vorbei, Loesung im Grund
         Game lose(v);
         CHECK(lose.play(others.front()));
-        CHECK(lose.outcome().result == GameResult::BlackWins);
+        CHECK(lose.outcome().result == (mover == Color::White ? GameResult::BlackWins : GameResult::WhiteWins));
         CHECK(lose.outcome().reason.find("gesucht war") != std::string::npos);
+        // Die genannte Loesung ist wirklich der Mattzug (auch gespiegelt)
+        Position tmp = g.position();
+        CHECK(win.outcome().reason.find(toSan(tmp, mates.front())) != std::string::npos);
     }
+    CHECK(black > 5 && black < 35);  // etwa die Haelfte gespiegelt
 }
 
 TEST_CASE(higher_priority_plugin_wins_conflicts) {
@@ -256,4 +267,140 @@ TEST_CASE(higher_priority_plugin_wins_conflicts) {
     Game g2(buildVariant({a, b}).variant);
     CHECK_EQ(g2.position().width(), 8);
     CHECK(g2.startPosition().fullmoveNumber() >= 10);
+}
+
+TEST_CASE(plugin_piece_images_stay_inside_plugin_folder) {
+    const auto all = discover({CHESS_PLUGINS_DIR});
+    const PluginInfo* big = findPlugin(all, "riesenbrett");
+    CHECK(big != nullptr);
+    if (big) {
+        const Variant v = buildVariant({*big}).variant;
+        const auto id = v.pieces->findById("drache");
+        CHECK(id.has_value());
+        if (id) {
+            const PieceType& t = v.pieces->get(*id);
+            CHECK(t.imageWhite.find("drache_weiss.png") != std::string::npos);
+            CHECK(std::filesystem::exists(t.imageWhite));
+            CHECK(std::filesystem::exists(t.imageBlack));
+        }
+    }
+    // Pfade aus dem Plugin-Ordner heraus werden abgelehnt
+    std::string err;
+    auto p = LuaPlugin::fromSource(
+        "return { on_load = function(r) r.add_piece{ id = 'x', symbol = 'X', image = '../../geheim.png' } end }", "img",
+        &err);
+    CHECK(p != nullptr);
+    Variant v = standardVariant();
+    auto reg = std::make_shared<PieceRegistry>(*PieceRegistry::standard());
+    CHECK(!p->install(v, *reg, 0, &err));
+    CHECK(err.find("Plugin-Ordner") != std::string::npos);
+}
+
+TEST_CASE(builtin_engine_understands_plugin_rules) {
+    // Koenigshuegel: ein Koenigszug auf d4/e4 gewinnt sofort – das sieht die Engine nur mit den Plugin-Regeln
+    auto v = variantFrom(R"(
+        return {
+          on_load = function(rules) rules.set_start("7k/6pp/8/8/8/4K3/PP6/8 w - - 0 1") end,
+          check_end = function(board)
+            for _, sq in ipairs({ {4,4}, {5,4}, {4,5}, {5,5} }) do
+              local id, color = board:get(sq[1], sq[2])
+              if id == "king" then return color, "Huegel" end
+            end
+          end,
+        })");
+    CHECK(v.has_value());
+    if (!v) return;
+    Game g(*v);
+    BuiltinEngine engine;
+    SearchLimits lim;
+    lim.depth = 2;
+    lim.game = &g;
+    const SearchResult r = engine.search(g.position(), lim);
+    CHECK(r.ok && r.bestMove.valid());
+    const std::string to = squareName(g.position(), r.bestMove.to);
+    CHECK(!r.lines.empty() && r.lines.front().score.mate && r.lines.front().score.winning);
+
+    // Atomschach: Schlagen neben dem eigenen Koenig sprengt ihn – die Engine darf das nicht tun.
+    // Weiss: Kc1, Turm a8; Schwarz: Kh8, Laeufer b2 (neben Kc1). Rxb2?? gibt es nicht, aber Kxb2 waere
+    // im Atomschach Selbstmord (der Koenig explodiert mit).
+    const auto all = discover({CHESS_PLUGINS_DIR});
+    const PluginInfo* atom = findPlugin(all, "atomschach");
+    CHECK(atom != nullptr);
+    if (atom) {
+        Variant av = buildVariant({*atom}).variant;
+        av.startFen = "7k/8/8/8/8/8/1b6/2K4R w - - 0 1";
+        Game ag(av);
+        SearchLimits al;
+        al.depth = 2;
+        al.game = &ag;
+        const SearchResult ar = engine.search(ag.position(), al);
+        CHECK(ar.bestMove.valid());
+        CHECK(squareName(ag.position(), ar.bestMove.to) != "b2");  // nicht mit dem Koenig schlagen
+        // Ohne Plugin-Regeln wuerde die Engine den freien Laeufer einfach nehmen
+        SearchLimits plain;
+        plain.depth = 2;
+        const SearchResult pr = engine.search(ag.position(), plain);
+        CHECK(squareName(ag.position(), pr.bestMove.to) == "b2");
+    }
+}
+
+TEST_CASE(plugin_ui_events_only_on_ui_thread) {
+    setUiThread(std::this_thread::get_id());
+    const auto all = discover({CHESS_PLUGINS_DIR});
+    const PluginInfo* atom = findPlugin(all, "atomschach");
+    CHECK(atom != nullptr);
+    if (!atom) return;
+    VariantBuild b = buildVariant({*atom});
+    CHECK_EQ(b.loaded.size(), size_t{1});
+    for (auto& lp : b.loaded) lp->takeUiEvents();
+    Game g(b.variant);
+    for (const char* m : {"e4", "d5", "exd5"}) CHECK(g.play(m));
+    const auto events = b.loaded.front()->takeUiEvents();
+    bool message = false, mark = false;
+    for (const auto& e : events) {
+        message |= e.kind == UiEvent::Kind::Message && e.text.find("Explosion") != std::string::npos;
+        mark |= e.kind == UiEvent::Kind::Mark && e.x1 == 4 && e.y1 == 5 && e.color == 1;
+    }
+    CHECK(message);
+    CHECK(mark);
+    // Gleicher Zug in einem anderen Thread (wie eine Engine-Suche): keine Meldungen
+    Game g2(b.variant);
+    std::async(std::launch::async, [&] {
+        for (const char* m : {"e4", "d5", "exd5"}) g2.play(m);
+    }).wait();
+    CHECK(b.loaded.front()->takeUiEvents().empty());
+    setUiThread({});
+}
+
+TEST_CASE(plugins_speak_english_when_asked) {
+    const auto all = discover({CHESS_PLUGINS_DIR});
+    const PluginInfo* big = findPlugin(all, "riesenbrett");
+    const PluginInfo* mate = findPlugin(all, "matt_in_eins");
+    const PluginInfo* mid = findPlugin(all, "zufallsmittelspiel");
+    CHECK(big && mate && mid);
+    if (!big || !mate || !mid) return;
+    CHECK_EQ(big->displayName(true), std::string("Giant Board 10×10"));
+    CHECK(!big->displayDescription(true).empty());
+    setLanguage(true);
+    const Variant bv = buildVariant({*big}).variant;
+    CHECK_EQ(bv.name, std::string("Giant Board 10×10"));
+    CHECK_EQ(bv.pieces->get(*bv.pieces->findById("drache")).name, std::string("Dragon"));
+    const Variant mv = buildVariant({*mid}).variant;
+    CHECK(mv.name.rfind("Middlegame from: ", 0) == 0);
+    CHECK(mv.name.find("Partie") == std::string::npos);  // englischer Eroeffnungsname
+    const Variant tv = buildVariant({*mate}).variant;
+    Game g(tv);
+    std::vector<Move> others;
+    for (const Move& m : g.legalMoves()) {
+        Position p = g.position();
+        p.makeMove(m);
+        if (!(p.inCheck(p.sideToMove()) && p.legalMoves().empty())) others.push_back(m);
+    }
+    CHECK(!others.empty());
+    if (!others.empty()) {
+        CHECK(g.play(others.front()));
+        CHECK(g.outcome().reason.rfind("No mate", 0) == 0);
+    }
+    setLanguage(false);
+    CHECK_EQ(buildVariant({*big}).variant.name, std::string("Riesenbrett 10×10"));
 }

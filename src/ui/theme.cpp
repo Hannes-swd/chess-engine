@@ -1,4 +1,5 @@
 #include "ui/theme.hpp"
+#include "ui/i18n.hpp"
 
 #include "ui/icons.hpp"
 

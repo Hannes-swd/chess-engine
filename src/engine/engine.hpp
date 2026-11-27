@@ -18,6 +18,9 @@ struct SearchLimits {
     int multiPv = 1;     // so viele beste Zuege mit Bewertung zurueckgeben
     std::vector<Move> rootMoves;               // leer = alle legalen Zuege
     const std::atomic<bool>* stop = nullptr;  // optional: von aussen abbrechen
+    // Optional: die Partie dazu. Hat sie Plugin-Regeln (Hooks), rechnet die eingebaute Engine auf Kopien
+    // der Partie, damit jeder Zug dieselben Regeln durchlaeuft wie im Spiel (z. B. Explosionen, eigene Siege).
+    const Game* game = nullptr;
 };
 
 struct ScoredMove {

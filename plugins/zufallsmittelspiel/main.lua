@@ -105,6 +105,6 @@ return {
   on_load = function(rules)
     local pick = positions[math.random(#positions)]
     rules.set_start(pick[1])
-    rules.set_name("Mittelspiel aus: " .. pick[2])
+    rules.set_name((lang == "en" and "Middlegame from: " or "Mittelspiel aus: ") .. opening_name(pick[2]))
   end,
 }

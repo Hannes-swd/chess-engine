@@ -36,6 +36,7 @@ struct TrainingData {
     std::vector<Puzzle> puzzles;
     std::map<std::string, int> openingRuns;   // Eroeffnung -> so oft geuebt
     std::map<std::string, int> openingClean;  // ... davon fehlerfrei
+    std::vector<std::string> harvested;       // gespeicherte Partien (Dateinamen), aus denen schon gesammelt wurde
 };
 
 // Einordnung eines Fehlers in eine verstaendliche Fehlerart.

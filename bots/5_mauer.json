@@ -1,6 +1,8 @@
 {
   "name": "Die Mauer",
   "description": "Spielt vorsichtig, denkt lange nach, vermeidet Abtausch und wartet auf deine Fehler.",
+  "name_en": "The Wall",
+  "description_en": "Plays cautiously, thinks for a long time, avoids trades and waits for your mistakes.",
   "engine": "auto",
   "strength": 1800,
   "movetimeMs": 500,

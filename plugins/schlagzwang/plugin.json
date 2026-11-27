@@ -1,6 +1,9 @@
 {
   "name": "Schlagzwang",
   "description": "Kann man schlagen, muss man schlagen. Zeigt, wie ein Plugin die erlaubten Züge filtert.",
+  "name_en": "Forced Capture",
+  "description_en": "If you can capture, you must. Shows how a plugin filters the allowed moves.",
+  "color": "#3B4148",
   "author": "ChessEngine",
   "version": "1.0"
 }

@@ -2,6 +2,7 @@
 // PGN aus der Zwischenablage einlesen und die aktuelle Partie exportieren.
 
 #include "ui/gui_app.hpp"
+#include "ui/i18n.hpp"
 
 #include "app/environment.hpp"
 #include "core/fen.hpp"
@@ -81,7 +82,7 @@ void GuiApp::scanSavedGames() {
 bool GuiApp::openPgn(const std::string& text, const fs::path& path) {
     const auto rec = parsePgn(text);
     if (!rec || rec->moves.empty()) {
-        setStatus("Keine Partie gefunden");
+        setStatus(tr("Keine Partie gefunden"));
         return false;
     }
     try {
@@ -106,11 +107,11 @@ bool GuiApp::openPgn(const std::string& text, const fs::path& path) {
         resultDismissed_ = true;
         flipped_ = rec->tag("Black") == "Du";
         mode_ = Mode::Analysis;
-        setStatus(path.empty() ? std::string("Partie aus der Zwischenablage geöffnet")
-                               : "Geöffnet: " + path.filename().string());
+        setStatus(path.empty() ? std::string(tr("Partie aus der Zwischenablage geöffnet"))
+                               : tr("Geöffnet: ") + path.filename().string());
         return true;
     } catch (const std::exception& e) {
-        setStatus(std::string("Partie nicht lesbar: ") + e.what());
+        setStatus(std::string(tr("Partie nicht lesbar: ")) + e.what());
         return false;
     }
 }
@@ -125,19 +126,19 @@ void GuiApp::tabGames() {
     ImGui::BeginChild("##games", ImVec2(0, 0), ImGuiChildFlags_None);
 
     // --- Liste der gespeicherten Partien ----------------------------------------------
-    sectionTitle("Gespeichert");
+    sectionTitle(tr("Gespeichert"));
     {
         const float btn = 22.0f * s + 2 * ImGui::GetStyle().FramePadding.y;
         ImGui::SameLine(ImGui::GetContentRegionMax().x - 2 * btn - 4 * s);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        if (iconButton("##paste", icon::upload, "PGN aus der Zwischenablage öffnen")) {
+        if (iconButton("##paste", icon::upload, tr("PGN aus der Zwischenablage öffnen"))) {
             if (char* clip = SDL_GetClipboardText()) {
                 openPgn(clip, {});
                 SDL_free(clip);
             }
         }
         ImGui::SameLine(0, 4 * s);
-        if (iconButton("##folder", icon::folder, "Ordner im Explorer öffnen")) {
+        if (iconButton("##folder", icon::folder, tr("Ordner im Explorer öffnen"))) {
             const std::string url = "file:///" + env::gamesDir().generic_string();
             SDL_OpenURL(url.c_str());
         }
@@ -150,9 +151,9 @@ void GuiApp::tabGames() {
         if (savedGames_.size() > 3) {
             const float chipW = 34 * s;
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 4 * (chipW + 2 * s) - 6 * s);
-            ImGui::InputTextWithHint("##gfilter", "Suchen: Gegner, Eröffnung, Datum", gamesFilter_, sizeof(gamesFilter_));
-            const char* chips[4] = {"Alle", "S", "R", "N"};
-            const char* tips[4] = {"Alle Partien", "Nur Siege", "Nur Remis", "Nur Niederlagen"};
+            ImGui::InputTextWithHint("##gfilter", tr("Suchen: Gegner, Eröffnung, Datum"), gamesFilter_, sizeof(gamesFilter_));
+            const char* chips[4] = {tr("Alle"), "S", "R", "N"};
+            const char* tips[4] = {tr("Alle Partien"), tr("Nur Siege"), tr("Nur Remis"), tr("Nur Niederlagen")};
             for (int i = 0; i < 4; ++i) {
                 ImGui::SameLine(0, i == 0 ? 6 * s : 2 * s);
                 const bool sel = gamesResultFilter_ == i;
@@ -169,7 +170,7 @@ void GuiApp::tabGames() {
         for (size_t i = 0; i < savedGames_.size(); ++i) {
             const SavedGame& g = savedGames_[i];
             if (!q.empty()) {
-                std::string hay = g.white + " " + g.black + " " + g.opening + " " + g.date;
+                std::string hay = g.white + " " + g.black + " " + displayPlayer(g.white) + " " + displayPlayer(g.black) + " " + g.opening + " " + localizedOpeningName(g.opening, true) + " " + g.date;
                 for (char& ch : hay) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
                 if (hay.find(q) == std::string::npos) continue;
             }
@@ -192,14 +193,13 @@ void GuiApp::tabGames() {
         ImGui::Dummy(ImVec2(0, 8 * s));
         ImGui::PushTextWrapPos(0);
         ImGui::TextColored(c.textMuted, "%s",
-                           "Noch keine Partien. Jede beendete Partie wird hier automatisch abgelegt, "
-                           "damit du sie später nachspielen und analysieren kannst.");
+                           tr("Noch keine Partien. Jede beendete Partie wird hier automatisch abgelegt, damit du sie später nachspielen und analysieren kannst."));
         ImGui::PopTextWrapPos();
     }
     ImFont* hf = theme_.heading ? theme_.heading : ImGui::GetFont();
     ImFont* sf = theme_.strong ? theme_.strong : ImGui::GetFont();
     ImFont* f = ImGui::GetFont();
-    if (!savedGames_.empty() && shown.empty()) ImGui::TextColored(c.textMuted, "Keine Partie passt zur Suche.");
+    if (!savedGames_.empty() && shown.empty()) ImGui::TextColored(c.textMuted, tr("Keine Partie passt zur Suche."));
     for (size_t i : shown) {
         const SavedGame& g = savedGames_[i];
         const float w = ImGui::GetContentRegionAvail().x;
@@ -234,17 +234,18 @@ void GuiApp::tabGames() {
                     res.c_str());
 
         const float x = t1.x + 12 * s;
-        const std::string names = (g.white.empty() ? "?" : g.white) + "  –  " + (g.black.empty() ? "?" : g.black);
+        const std::string names = (g.white.empty() ? "?" : displayPlayer(g.white)) + "  –  " +
+                                  (g.black.empty() ? "?" : displayPlayer(g.black));
         dl->PushClipRect(ImVec2(x, p0.y), ImVec2(p1.x - 30 * s, p1.y), true);
         dl->AddText(sf, 16.5f * s, ImVec2(x, p0.y + pad + 1 * s), Theme::u32(c.text), names.c_str());
-        std::string meta = g.date + "   " + std::to_string(g.moves) + (g.moves == 1 ? " Zug" : " Züge");
-        if (!g.opening.empty()) meta += "   " + g.opening;
+        std::string meta = g.date + "   " + std::to_string(g.moves) + (g.moves == 1 ? tr(" Zug") : tr(" Züge"));
+        if (!g.opening.empty()) meta += "   " + localizedOpeningName(g.opening, english());
         dl->AddText(f, 14.5f * s, ImVec2(x, p0.y + pad + 22 * s), Theme::u32(c.textMuted), meta.c_str());
         dl->PopClipRect();
         if (hovered || open)
             Theme::glyphCentered(dl, theme_.body, 20 * s, ImVec2(p1.x - 16 * s, (p0.y + p1.y) * 0.5f),
                                  Theme::u32(open ? c.accent : c.textMuted), icon::next);
-        if (hovered) ImGui::SetTooltip("Öffnen und analysieren");
+        if (hovered) ImGui::SetTooltip(tr("Öffnen und analysieren"));
         if (clicked) openSavedGame(g.path);
     }
     ImGui::EndChild();
@@ -257,7 +258,7 @@ void GuiApp::tabGames() {
 void GuiApp::tabExport() {
     const Palette& c = theme_.p();
     const float s = theme_.scale;
-    sectionTitle("Diese Partie als PGN");
+    sectionTitle(tr("Diese Partie als PGN"));
     std::string pgn = pgnText();
     ImGui::PushStyleColor(ImGuiCol_FrameBg, alpha(c.surfaceRaised, 0.6f));
     ImGui::InputTextMultiline("##pgn", pgn.data(), pgn.size() + 1, ImVec2(-FLT_MIN, 96 * s),
@@ -272,32 +273,32 @@ void GuiApp::tabExport() {
         if (tip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
         return clicked;
     };
-    if (ghost(icon::copy, "Kopieren", "Für lichess.org/paste oder andere Programme")) {
+    if (ghost(icon::copy, tr("Kopieren"), tr("Für lichess.org/paste oder andere Programme"))) {
         ImGui::SetClipboardText(pgn.c_str());
-        setStatus("PGN in die Zwischenablage kopiert");
+        setStatus(tr("PGN in die Zwischenablage kopiert"));
     }
     ImGui::SameLine(0, 4 * s);
-    if (ghost(icon::save, "Speichern", nullptr)) savePgn(false);
+    if (ghost(icon::save, tr("Speichern"), nullptr)) savePgn(false);
 
-    sectionTitle("Stellung (FEN)");
+    sectionTitle(tr("Stellung (FEN)"));
     std::string fen = toFen(viewedPosition());
     const float btn = 22.0f * s + 2 * ImGui::GetStyle().FramePadding.y;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - btn - ImGui::GetStyle().ItemSpacing.x);
     ImGui::InputText("##fen", fen.data(), fen.size() + 1, ImGuiInputTextFlags_ReadOnly);
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    if (iconButton("##fencopy", icon::copy, "FEN der angezeigten Stellung kopieren")) {
+    if (iconButton("##fencopy", icon::copy, tr("FEN der angezeigten Stellung kopieren"))) {
         ImGui::SetClipboardText(fen.c_str());
-        setStatus("FEN kopiert");
+        setStatus(tr("FEN kopiert"));
     }
     ImGui::PopStyleColor();
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - btn - ImGui::GetStyle().ItemSpacing.x);
-    const bool enter = ImGui::InputTextWithHint("##fenin", "FEN einfügen, um von dieser Stellung zu spielen", fenInput_,
+    const bool enter = ImGui::InputTextWithHint("##fenin", tr("FEN einfügen, um von dieser Stellung zu spielen"), fenInput_,
                                                 sizeof(fenInput_), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    if ((iconButton("##fenload", icon::start, "Stellung laden (Enter)", false, 0, fenInput_[0] != 0) || enter) &&
+    if ((iconButton("##fenload", icon::start, tr("Stellung laden (Enter)"), false, 0, fenInput_[0] != 0) || enter) &&
         fenInput_[0])
         loadFen(fenInput_);
     ImGui::PopStyleColor();

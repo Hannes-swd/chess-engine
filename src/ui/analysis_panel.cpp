@@ -2,6 +2,7 @@
 // ein Coach, der jeden Zug erklaert und die bessere Fortsetzung auf dem Brett vorspielt.
 
 #include "ui/gui_app.hpp"
+#include "ui/i18n.hpp"
 
 #include "core/notation.hpp"
 #include "ui/icons.hpp"
@@ -72,12 +73,12 @@ void GuiApp::drawPreviewBanner(ImVec2 min, ImVec2 max) {
     const float btn = 22.0f * s + 2 * ImGui::GetStyle().FramePadding.y;
     const float y = (min.y + max.y - btn) * 0.5f;
     ImGui::SetCursorScreenPos(ImVec2(max.x - 3 * btn - 12 * s, y));
-    if (iconButton("##pvprev", icon::prev, "Zug zurück (←)", false, 0, p.index > 0)) setPreviewIndex(p.index - 1);
+    if (iconButton("##pvprev", icon::prev, tr("Zug zurück (←)"), false, 0, p.index > 0)) setPreviewIndex(p.index - 1);
     ImGui::SameLine(0, 2 * s);
-    if (iconButton("##pvnext", icon::next, "Zug vor (→)", false, 0, p.index < static_cast<int>(p.moves.size())))
+    if (iconButton("##pvnext", icon::next, tr("Zug vor (→)"), false, 0, p.index < static_cast<int>(p.moves.size())))
         setPreviewIndex(p.index + 1);
     ImGui::SameLine(0, 2 * s);
-    const bool close = iconButton("##pvclose", icon::close, "Zurück zur Partie (Esc)");
+    const bool close = iconButton("##pvclose", icon::close, tr("Zurück zur Partie (Esc)"));
 
     ImFont* f = theme_.strong ? theme_.strong : ImGui::GetFont();
     const float fs = ImGui::GetFontSize();
@@ -147,10 +148,10 @@ void GuiApp::drawEvalGraph(float height) {
         const float mx = ImGui::GetIO().MousePos.x;
         const int k = std::clamp(static_cast<int>(std::lround((mx - p0.x) / width * (points - 1))), 0, points - 1);
         dl->AddLine(ImVec2(xAt(k), p0.y), ImVec2(xAt(k), p1.y), Theme::u32(c.textMuted, 0.7f), 1.0f * s);
-        std::string tip = k == 0 ? std::string("Startstellung") : figurine(moveLabel(k - 1));
+        std::string tip = k == 0 ? std::string(tr("Startstellung")) : figurine(moveLabel(k - 1));
         tip += "\n" + a.whiteEvals[static_cast<size_t>(k)].toString();
         if (k > 0 && k - 1 < static_cast<int>(a.moves.size()))
-            tip += "   " + qualityName(a.moves[static_cast<size_t>(k - 1)].quality);
+            tip += "   " + tr(qualityName(a.moves[static_cast<size_t>(k - 1)].quality));
         ImGui::SetTooltip("%s", tip.c_str());
         if (clicked) {
             preview_.reset();
@@ -175,7 +176,7 @@ void GuiApp::tabAnalysis() {
                              ImGui::GetCursorScreenPos() + ImVec2(20 * s, 20 * s), Theme::u32(c.textMuted), icon::chart);
         ImGui::Dummy(ImVec2(0, 48 * s));
         ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted("Spiel eine Partie. Danach siehst du hier jeden Zug bewertet und erklärt.");
+        ImGui::TextUnformatted(tr("Spiel eine Partie. Danach siehst du hier jeden Zug bewertet und erklärt."));
         ImGui::PopTextWrapPos();
         ImGui::EndChild();
         return;
@@ -183,10 +184,10 @@ void GuiApp::tabAnalysis() {
 
     auto runControls = [&]() {
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderInt("##depth", &analysisDepth_, 4, 24, "Suchtiefe %d");
+        ImGui::SliderInt("##depth", &analysisDepth_, 4, 24, tr("Suchtiefe %d"));
         ImGui::BeginDisabled(engineBusy());
         ImGui::PushFont(theme_.strong, 0.0f);
-        if (primaryButton((std::string(icon::analysis) + "  " + (analysis_ ? "Neu analysieren" : "Partie analysieren")).c_str(),
+        if (primaryButton((std::string(icon::analysis) + "  " + (analysis_ ? tr("Neu analysieren") : tr("Partie analysieren"))).c_str(),
                           ImVec2(-FLT_MIN, 42 * s)))
             startAnalysis();
         ImGui::PopFont();
@@ -195,10 +196,10 @@ void GuiApp::tabAnalysis() {
 
     if (analysisRunning()) {
         const int done = progressDone_->load(), total = std::max(1, progressTotal_->load());
-        ImGui::TextUnformatted("Stockfish bewertet jede Stellung …");
-        const std::string label = "Stellung " + std::to_string(done) + " von " + std::to_string(total);
+        ImGui::TextUnformatted(tr("Stockfish bewertet jede Stellung …"));
+        const std::string label = tr("Stellung ") + std::to_string(done) + tr(" von ") + std::to_string(total);
         ImGui::ProgressBar(static_cast<float>(done) / total, ImVec2(-FLT_MIN, 0), label.c_str());
-        if (ImGui::Button((std::string(icon::stop) + "  Abbrechen").c_str())) analysisStop_->store(true);
+        if (ImGui::Button((std::string(icon::stop) + tr("  Abbrechen")).c_str())) analysisStop_->store(true);
         if (!analysis_) {
             ImGui::EndChild();
             return;
@@ -206,8 +207,7 @@ void GuiApp::tabAnalysis() {
     } else if (!analysis_) {
         ImGui::PushTextWrapPos(0);
         ImGui::TextUnformatted(
-            "Jeder Zug wird mit dem besten Zug verglichen, eingestuft und erklärt – von brillant bis Patzer. "
-            "Du siehst, wer wann besser stand, und kannst die bessere Fortsetzung auf dem Brett durchspielen.");
+            tr("Jeder Zug wird mit dem besten Zug verglichen, eingestuft und erklärt – von brillant bis Patzer. Du siehst, wer wann besser stand, und kannst die bessere Fortsetzung auf dem Brett durchspielen."));
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, 6 * s));
         runControls();
@@ -217,7 +217,7 @@ void GuiApp::tabAnalysis() {
 
     const GameAnalysis& a = *analysis_;
     if (analysisPly_ < n)
-        ImGui::TextColored(c.qInaccuracy, "%d neue Züge seit der Analyse", n - analysisPly_);
+        ImGui::TextColored(c.qInaccuracy, tr("%d neue Züge seit der Analyse"), n - analysisPly_);
 
     // --- Bewertungskurve --------------------------------------------------------
     drawEvalGraph(118 * s);
@@ -240,7 +240,7 @@ void GuiApp::tabAnalysis() {
         dl->AddText(theme_.heading, 38 * s, ImVec2(x, accPos.y + 24 * s), Theme::u32(c.text), acc.c_str());
         const float accW = theme_.heading->CalcTextSizeA(38 * s, FLT_MAX, 0.0f, acc.c_str()).x;
         dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(x + accW + 4 * s, accPos.y + 42 * s),
-                    Theme::u32(c.textMuted), "Genauigkeit");
+                    Theme::u32(c.textMuted), tr("Genauigkeit"));
     }
     ImGui::Dummy(ImVec2(0, 76 * s));
 
@@ -259,8 +259,8 @@ void GuiApp::tabAnalysis() {
         // Drei Werte nebeneinander: Zahl gross, Bedeutung klein darunter
         const std::string vals[3] = {decimal(a.whiteBetter, 0) + " %", decimal(a.balanced, 0) + " %",
                                      decimal(a.blackBetter, 0) + " %"};
-        const std::string labels[3] = {playerName(Color::White) + " vorn", "ausgeglichen",
-                                       playerName(Color::Black) + " vorn"};
+        const std::string labels[3] = {playerName(Color::White) + tr(" vorn"), tr("ausgeglichen"),
+                                       playerName(Color::Black) + tr(" vorn")};
         const float y = ImGui::GetCursorScreenPos().y + 2 * s;
         ImFont* hf = theme_.heading ? theme_.heading : ImGui::GetFont();
         ImFont* f = ImGui::GetFont();
@@ -290,35 +290,37 @@ void GuiApp::tabAnalysis() {
         ImGui::SetCursorScreenPos(ImVec2(cp.x + 2 * rad + 10 * s, cp.y + 2 * s));
         ImGui::PushFont(theme_.heading, 21.0f);
         // Zug im Titel mit Figurensymbol, wie in der Zugliste
-        std::string headline = r->headline;
+        const bool en = language() == Language::English && !r->headlineEn.empty();
+        std::string headline = en ? r->headlineEn : r->headline;
+
         if (const size_t at = headline.find(r->san); !r->san.empty() && at != std::string::npos)
             headline.replace(at, r->san.size(), figurine(r->san));
         ImGui::TextColored(theme_.quality(r->quality), "%s", headline.c_str());
         ImGui::PopFont();
         ImGui::SetCursorScreenPos(ImVec2(cp.x, cp.y + 2 * rad + 8 * s));
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + w);
-        ImGui::TextUnformatted(r->explanation.c_str());
+        ImGui::TextUnformatted((en && !r->explanationEn.empty() ? r->explanationEn : r->explanation).c_str());
         ImGui::PopTextWrapPos();
         const Score white = r->mover == Color::White ? r->playedScore : r->playedScore.negated();
-        ImGui::TextDisabled("%s   Bewertung danach %s   Genauigkeit %s %%", figurine(moveLabel(idx)).c_str(),
+        ImGui::TextDisabled(tr("%s   Bewertung danach %s   Genauigkeit %s %%"), figurine(moveLabel(idx)).c_str(),
                             white.toString().c_str(), decimal(r->accuracy, 0).c_str());
 
         // Aktionen: Variante auf dem Brett durchspielen
         const bool wasBest = r->quality == MoveQuality::Best || r->quality == MoveQuality::Brilliant ||
                              r->quality == MoveQuality::Great || r->quality == MoveQuality::Forced;
         if (!wasBest && !r->bestLine.empty()) {
-            if (primaryButton((std::string(icon::replay) + "  Besseren Zug zeigen").c_str()))
-                startPreview(game_.positionAt(idx), r->bestLine, "Besser war " + figurine(r->bestSan));
+            if (primaryButton((std::string(icon::replay) + tr("  Besseren Zug zeigen")).c_str()))
+                startPreview(game_.positionAt(idx), r->bestLine, tr("Besser war ") + figurine(r->bestSan));
             ImGui::SameLine();
         }
         if (!r->threatLine.empty()) {
-            const char* label = wasBest ? "Fortsetzung zeigen" : "Antwort des Gegners";
+            const char* label = wasBest ? tr("Fortsetzung zeigen") : tr("Antwort des Gegners");
             if (ImGui::Button((std::string(wasBest ? icon::forward : icon::threat) + "  " + label).c_str()))
                 startPreview(game_.positionAt(idx + 1), r->threatLine,
-                             wasBest ? "Fortsetzung nach " + figurine(r->san) : "Antwort auf " + figurine(r->san));
+                             wasBest ? tr("Fortsetzung nach ") + figurine(r->san) : tr("Antwort auf ") + figurine(r->san));
         }
     } else {
-        ImGui::TextDisabled("Klick in die Kurve oder blättere mit ← → durch die Züge.");
+        ImGui::TextDisabled(tr("Klick in die Kurve oder blättere mit ← → durch die Züge."));
     }
 
     // Navigation zwischen Zuegen und Fehlern
@@ -336,20 +338,20 @@ void GuiApp::tabAnalysis() {
         dl->AddRectFilled(n0, ImVec2(n0.x + w, n0.y + bh), Theme::u32(c.surfaceRaised), 8 * s);
         const float w4 = w / 4;
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        if (iconButton("##aprevErr", icon::skipPrev, "Vorheriger Fehler", false, w4, prevErr >= 0)) setView(prevErr + 1);
+        if (iconButton("##aprevErr", icon::skipPrev, tr("Vorheriger Fehler"), false, w4, prevErr >= 0)) setView(prevErr + 1);
         ImGui::SameLine(0, 0);
-        if (iconButton("##aprev", icon::prev, "Zug zurück (←)", false, w4, viewPly() > 0)) setView(viewPly() - 1);
+        if (iconButton("##aprev", icon::prev, tr("Zug zurück (←)"), false, w4, viewPly() > 0)) setView(viewPly() - 1);
         ImGui::SameLine(0, 0);
-        if (iconButton("##anext", icon::next, "Zug vor (→)", false, w4, viewPly() < n)) setView(viewPly() + 1);
+        if (iconButton("##anext", icon::next, tr("Zug vor (→)"), false, w4, viewPly() < n)) setView(viewPly() + 1);
         ImGui::SameLine(0, 0);
-        if (iconButton("##anextErr", icon::skipNext, "Nächster Fehler", false, w4, nextErr >= 0)) setView(nextErr + 1);
+        if (iconButton("##anextErr", icon::skipNext, tr("Nächster Fehler"), false, w4, nextErr >= 0)) setView(nextErr + 1);
         ImGui::PopStyleColor();
     }
     ImGui::Dummy(ImVec2(0, 6 * s));
 
     // --- Zugkategorien je Spieler ------------------------------------------------
     if (ImGui::BeginTable("##cats", 3, ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Kategorie", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+        ImGui::TableSetupColumn(tr("Kategorie"), ImGuiTableColumnFlags_WidthStretch, 3.0f);
         ImGui::TableSetupColumn("W", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("S", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         auto centered = [&](const char* text, ImVec4 col) {
@@ -378,9 +380,9 @@ void GuiApp::tabAnalysis() {
             theme_.qualityBadge(dl, q, ImVec2(rp.x + rad, rp.y + ImGui::GetTextLineHeight() * 0.5f), rad);
             ImGui::SetCursorScreenPos(ImVec2(rp.x + 2 * rad + 8 * s, rp.y));
             if (w + b == 0)
-                ImGui::TextDisabled("%s", qualityName(q).c_str());
+                ImGui::TextDisabled("%s", tr(qualityName(q)).c_str());
             else
-                ImGui::TextUnformatted(qualityName(q).c_str());
+                ImGui::TextUnformatted(tr(qualityName(q)).c_str());
             for (int col = 0; col < 2; ++col) {
                 ImGui::TableSetColumnIndex(1 + col);
                 const int v = col == 0 ? w : b;
@@ -392,14 +394,14 @@ void GuiApp::tabAnalysis() {
     }
 
     ImGui::Dummy(ImVec2(0, 6 * s));
-    sectionTitle("Neu analysieren");
+    sectionTitle(tr("Neu analysieren"));
     {
-        const float btnW = ImGui::CalcTextSize("Starten").x + 52 * s;
+        const float btnW = ImGui::CalcTextSize(tr("Starten")).x + 52 * s;
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - btnW - ImGui::GetStyle().ItemSpacing.x);
-        ImGui::SliderInt("##depth2", &analysisDepth_, 4, 24, "Suchtiefe %d");
+        ImGui::SliderInt("##depth2", &analysisDepth_, 4, 24, tr("Suchtiefe %d"));
         ImGui::SameLine();
         ImGui::BeginDisabled(engineBusy());
-        if (ImGui::Button((std::string(icon::refresh) + "  Starten").c_str(), ImVec2(-FLT_MIN, 0))) startAnalysis();
+        if (ImGui::Button((std::string(icon::refresh) + tr("  Starten")).c_str(), ImVec2(-FLT_MIN, 0))) startAnalysis();
         ImGui::EndDisabled();
     }
     ImGui::EndChild();

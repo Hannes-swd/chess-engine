@@ -1,6 +1,9 @@
 {
   "name": "Zufälliges Mittelspiel",
   "description": "Jede Partie beginnt mitten im Spiel, in einer von 93 ausgeglichenen Stellungen aus bekannten Eröffnungen (etwa Zug 12 bis 16). Trainiert, sich schnell in fremden Stellungen zurechtzufinden und einen Plan zu fassen.",
+  "name_en": "Random Middlegame",
+  "description_en": "Every game starts in the middle, in one of 93 balanced positions from well-known openings (around moves 12 to 16). Trains getting your bearings quickly in unfamiliar positions and finding a plan.",
+  "color": "#4E6A7A",
   "author": "ChessEngine",
   "version": "1.0",
   "priority": 5

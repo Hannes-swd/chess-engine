@@ -18,7 +18,7 @@ end
 return {
   on_load = function(rules)
     local black = backRank()
-    rules.set_name("Zufallsaufstellung")
+    rules.set_name(lang == "en" and "Random Setup" or "Zufallsaufstellung")
     rules.set_start(black .. "/pppppppp/8/8/8/8/PPPPPPPP/" .. black:upper() .. " w - - 0 1")
   end,
 }

@@ -52,6 +52,8 @@ struct MoveReview {
 
     std::string headline;     // "Nxd5 ist ungenau"
     std::string explanation;  // ein paar Saetze: warum, was droht, was besser war
+    std::string headlineEn;   // dasselbe auf Englisch
+    std::string explanationEn;
 };
 
 struct PlayerSummary {

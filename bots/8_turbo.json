@@ -1,6 +1,8 @@
 {
   "name": "Turbo",
   "description": "Zieht sofort, ohne lange nachzudenken – ideal für Bullet und schnelles Üben.",
+  "name_en": "Turbo",
+  "description_en": "Moves instantly without thinking long – ideal for bullet and quick practice.",
   "engine": "auto",
   "strength": 1100,
   "movetimeMs": 100,

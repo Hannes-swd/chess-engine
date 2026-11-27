@@ -1,6 +1,9 @@
 {
   "name": "Amazone",
   "description": "Die Dame wird zur Amazone: Sie zieht wie Dame und Springer zugleich.",
+  "name_en": "Amazon",
+  "description_en": "The queen becomes an amazon: she moves like a queen and a knight at once.",
+  "color": "#6E5470",
   "author": "ChessEngine",
   "version": "1.0",
   "priority": 10

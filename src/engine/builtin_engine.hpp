@@ -21,6 +21,10 @@ public:
 
 private:
     int negamax(Position& pos, int depth, int alpha, int beta, int ply);
+    // Variante mit Plugin-Regeln: rechnet auf einer Kopie der Partie (play/undo durchlaufen alle Hooks)
+    SearchResult searchGame(const Game& game, const SearchLimits& limits);
+    int negamaxGame(Game& g, int depth, int alpha, int beta, int ply);
+    int quiesceGame(Game& g, int alpha, int beta, int ply);
     int quiesce(Position& pos, int alpha, int beta, int ply);
     void orderMoves(const Position& pos, std::vector<Move>& moves) const;
     bool checkAbort();

@@ -1,6 +1,8 @@
 {
   "name": "Hobbyspieler",
   "description": "Spielt gern und schnell. Sieht einfache Schläge, verliert aber bei Zwei-Zug-Taktiken den Überblick.",
+  "name_en": "Hobbyist",
+  "description_en": "Likes to play fast. Spots simple captures but loses track in two-move tactics.",
   "engine": "auto",
   "strength": 1000,
   "movetimeMs": 300,

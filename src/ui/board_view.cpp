@@ -1,4 +1,5 @@
 #include "ui/board_view.hpp"
+#include "ui/i18n.hpp"
 
 #include "core/tactics.hpp"
 
@@ -107,10 +108,57 @@ void BoardView::drawPiece(ImDrawList* dl, const Theme& theme, const PieceType& t
     const Palette& c = theme.p();
     const ImU32 fill = Theme::u32(color == Color::White ? c.whiteFill : c.blackFill);
     const ImU32 outline = Theme::u32(color == Color::White ? c.whiteOutline : c.blackOutline);
+    // Eigenes Bild (z. B. aus einem Plugin) hat Vorrang
+    if (theme.pieceImage) {
+        const std::string& path = color == Color::White ? (type.imageWhite.empty() ? type.imageBlack : type.imageWhite)
+                                                        : (type.imageBlack.empty() ? type.imageWhite : type.imageBlack);
+        if (!path.empty())
+            if (const ImTextureID tex = theme.pieceImage(path)) {
+                const float h = cell * 0.46f;
+                dl->AddImage(tex, ImVec2(center.x - h, center.y - h), ImVec2(center.x + h, center.y + h));
+                return;
+            }
+    }
     const char* glyph = glyphFor(type.id);
-
+    // Figurensatz "Buchstaben": deutsche Kuerzel auf Scheiben (K, D, T, L, S, B) – hilft beim Notation-Lernen
+    if (theme.pieceSet == 2) {
+        static const std::pair<const char*, const char*> german[] = {{"king", "K"},   {"queen", "D"},  {"rook", "T"},
+                                                                     {"bishop", "L"}, {"knight", "S"}, {"pawn", "B"}};
+        std::string letter(1, type.symbol);
+        for (const auto& [id, l] : german)
+            if (type.id == id) letter = l;
+        const float r = type.pawnLike ? cell * 0.30f : cell * 0.38f;
+        dl->AddCircleFilled(center + ImVec2(0, cell * 0.03f), r, IM_COL32(0, 0, 0, 50));
+        dl->AddCircleFilled(center, r, fill);
+        dl->AddCircle(center, r, outline, 0, std::max(1.5f, cell * 0.025f));
+        ImFont* font = theme.heading ? theme.heading : ImGui::GetFont();
+        const float fs = type.pawnLike ? cell * 0.34f : cell * 0.44f;
+        const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, letter.c_str());
+        dl->AddText(font, fs, ImVec2(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f), outline, letter.c_str());
+        return;
+    }
     if (glyph && theme.pieces) {
         const float fs = cell * 0.84f;
+        if (theme.pieceSet == 1) {
+            // Figurensatz "Diagramm": wie in Schachbuechern – Flaeche plus feine Linienzeichnung
+            // (Umriss-Symbole U+2654..2659 ueber der gefuellten Form)
+            static const std::pair<const char*, const char*> lineArt[] = {
+                {"king", "\xE2\x99\x94"},   {"queen", "\xE2\x99\x95"},  {"rook", "\xE2\x99\x96"},
+                {"bishop", "\xE2\x99\x97"}, {"knight", "\xE2\x99\x98"}, {"pawn", "\xE2\x99\x99"}};
+            const char* lines = nullptr;
+            for (const auto& [id, g] : lineArt)
+                if (type.id == id) lines = g;
+            const ImVec2 ts = theme.pieces->CalcTextSizeA(fs, FLT_MAX, 0.0f, glyph);
+            const ImVec2 pos(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f);
+            const bool white = color == Color::White;
+            dl->AddText(theme.pieces, fs, pos, Theme::u32(white ? c.whiteFill : c.blackFill), glyph);
+            if (lines) {
+                const ImVec2 ls = theme.pieces->CalcTextSizeA(fs, FLT_MAX, 0.0f, lines);
+                const ImVec2 lp(center.x - ls.x * 0.5f, center.y - ls.y * 0.5f);
+                dl->AddText(theme.pieces, fs, lp, Theme::u32(white ? c.whiteOutline : c.blackOutline), lines);
+            }
+            return;
+        }
         const ImVec2 ts = theme.pieces->CalcTextSizeA(fs, FLT_MAX, 0.0f, glyph);
         const ImVec2 pos(center.x - ts.x * 0.5f, center.y - ts.y * 0.5f);
         const float o = std::max(1.0f, cell * 0.022f);
@@ -424,7 +472,7 @@ std::optional<Move> BoardView::draw(const Position& pos, const std::vector<Move>
         ImGui::SetNextWindowPos(ImVec2(at.x, at.y), ImGuiCond_Appearing);
     }
     if (ImGui::BeginPopup("##promotion")) {
-        ImGui::TextDisabled("Umwandeln in");
+        ImGui::TextDisabled(tr("Umwandeln in"));
         const Color mover = promotionChoices_.empty() ? pos.sideToMove() : pos.at(promotionChoices_.front().from).color;
         for (size_t i = 0; i < promotionChoices_.size(); ++i) {
             const Move m = promotionChoices_[i];

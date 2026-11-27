@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,9 @@ public:
     ImFont* heading = nullptr;  // Bahnschrift – Ueberschriften, Uhren, Elo, Genauigkeit
     ImFont* pieces = nullptr;   // Schachsymbole (Segoe UI Symbol); nullptr -> Buchstaben
     bool hasIcons = false;
+    // Liefert die Textur zu einem Bildpfad (Figurenbilder aus Plugins); 0 = nicht verfuegbar
+    std::function<ImTextureID(const std::string&)> pieceImage;
+    int pieceSet = 0;  // 0 Klassisch, 1 Diagramm, 2 Buchstaben
 
     const Palette& p() const { return dark ? darkPalette_ : lightPalette_; }
 

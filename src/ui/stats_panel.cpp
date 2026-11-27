@@ -2,8 +2,10 @@
 // Fehlerverteilung und die eigenen Eroeffnungen. Alles aus profil.json und den gespeicherten Partien.
 
 #include "ui/gui_app.hpp"
+#include "ui/i18n.hpp"
 
 #include "ui/icons.hpp"
+#include "core/openings.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -39,7 +41,7 @@ void GuiApp::drawEloCurve(float height) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(p0, p1, Theme::u32(alpha(c.surfaceRaised, 0.6f)), 6 * s);
     if (h.size() < 2) {
-        const char* msg = "Die Kurve entsteht mit deinen gewerteten Partien.";
+        const char* msg = tr("Die Kurve entsteht mit deinen gewerteten Partien.");
         const ImVec2 ts = ImGui::CalcTextSize(msg);
         dl->AddText(ImVec2((p0.x + p1.x - ts.x) * 0.5f, (p0.y + p1.y - ts.y) * 0.5f), Theme::u32(c.textMuted), msg);
         return;
@@ -75,8 +77,8 @@ void GuiApp::drawEloCurve(float height) {
         for (size_t i = 0; i < h.size(); ++i)
             if (std::abs(xAt(i) - mx) < std::abs(xAt(k) - mx)) k = i;
         dl->AddCircle(line[k], 6 * s, Theme::u32(c.text), 0, 1.5f * s);
-        std::string tip = "Elo " + std::to_string(h[k].rating);
-        if (!h[k].opponent.empty()) tip += "\nGegen " + h[k].opponent;
+        std::string tip = tr("Elo ") + std::to_string(h[k].rating);
+        if (!h[k].opponent.empty()) tip += tr("\nGegen ") + h[k].opponent;
         if (h[k].date.size() >= 10)
             tip += "\n" + h[k].date.substr(8, 2) + "." + h[k].date.substr(5, 2) + "." + h[k].date.substr(0, 4);
         ImGui::SetTooltip("%s", tip.c_str());
@@ -97,7 +99,7 @@ void GuiApp::panelStats() {
         const float cw = ImGui::GetContentRegionAvail().x / 3;
         const std::string vals[3] = {std::to_string(player_.rating), std::to_string(player_.peak),
                                      std::to_string(player_.games)};
-        const char* labels[3] = {"Elo", "Bestwert", "gewertete Partien"};
+        const char* labels[3] = {"Elo", tr("Bestwert"), tr("gewertete Partien")};
         for (int i = 0; i < 3; ++i) {
             dl->AddText(hf, 28 * s, ImVec2(p0.x + i * cw, p0.y), Theme::u32(i == 0 ? c.accent : c.text), vals[i].c_str());
             dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(p0.x + i * cw, p0.y + 32 * s), Theme::u32(c.textMuted), labels[i]);
@@ -127,10 +129,10 @@ void GuiApp::panelStats() {
         if (g.accuracyYou) accuracies.push_back(*g.accuracyYou);
     }
 
-    sectionTitle("Bilanz");
+    sectionTitle(tr("Bilanz"));
     if (all.games() == 0) {
         ImGui::PushTextWrapPos(0);
-        ImGui::TextColored(c.textMuted, "%s", "Noch keine beendeten Partien von dir gespeichert.");
+        ImGui::TextColored(c.textMuted, "%s", tr("Noch keine beendeten Partien von dir gespeichert."));
         ImGui::PopTextWrapPos();
     } else {
         auto bar = [&](const char* label, const Tally& t) {
@@ -154,19 +156,19 @@ void GuiApp::panelStats() {
             }
             ImGui::Dummy(ImVec2(fullW, 36 * s));
         };
-        bar("Gesamt", all);
-        if (asWhite.games()) bar("Mit Weiß", asWhite);
-        if (asBlack.games()) bar("Mit Schwarz", asBlack);
+        bar(tr("Gesamt"), all);
+        if (asWhite.games()) bar(tr("Mit Weiß"), asWhite);
+        if (asBlack.games()) bar(tr("Mit Schwarz"), asBlack);
 
-        sectionTitle("Gegen die Bots");
+        sectionTitle(tr("Gegen die Bots"));
         std::vector<std::pair<std::string, Tally>> opp(byOpponent.begin(), byOpponent.end());
         std::sort(opp.begin(), opp.end(), [](const auto& a, const auto& b) { return a.second.games() > b.second.games(); });
-        for (const auto& [name, t] : opp) bar(name.c_str(), t);
+        for (const auto& [name, t] : opp) bar(displayPlayer(name).c_str(), t);
     }
 
     // --- Genauigkeit ----------------------------------------------------------------------
     if (!accuracies.empty()) {
-        sectionTitle("Genauigkeit");
+        sectionTitle(tr("Genauigkeit"));
         double sum = 0;
         for (double a : accuracies) sum += a;
         const double avg = sum / accuracies.size();
@@ -182,10 +184,10 @@ void GuiApp::panelStats() {
         dl->AddText(hf, 30 * s, p0, Theme::u32(c.text), a.c_str());
         const float aw = hf->CalcTextSizeA(30 * s, FLT_MAX, 0.0f, a.c_str()).x;
         dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(p0.x + aw + 8 * s, p0.y + 4 * s), Theme::u32(c.textMuted),
-                    ("im Schnitt aus " + std::to_string(accuracies.size()) + " analysierten Partien").c_str());
+                    (tr("im Schnitt aus ") + std::to_string(accuracies.size()) + tr(" analysierten Partien")).c_str());
         const double diff = recent - avg;
         std::snprintf(buf, sizeof(buf), "%+.1f", diff);
-        std::string trend = std::string("letzte ") + std::to_string(recentN) + ": " + buf;
+        std::string trend = std::string(tr("letzte ")) + std::to_string(recentN) + ": " + buf;
         std::replace(trend.begin(), trend.end(), '.', ',');
         dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(p0.x + aw + 8 * s, p0.y + 22 * s),
                     Theme::u32(diff >= 0 ? c.qBest : c.qMistake), trend.c_str());
@@ -197,10 +199,10 @@ void GuiApp::panelStats() {
             const int n = counts[static_cast<size_t>(q)];
             const ImVec2 rp = ImGui::GetCursorScreenPos();
             theme_.qualityBadge(dl, q, ImVec2(rp.x + 9 * s, rp.y + 10 * s), 9 * s);
-            dl->AddText(ImGui::GetFont(), 16 * s, ImVec2(rp.x + 26 * s, rp.y), Theme::u32(c.text), qualityName(q).c_str());
+            dl->AddText(ImGui::GetFont(), 16 * s, ImVec2(rp.x + 26 * s, rp.y), Theme::u32(c.text), tr(qualityName(q)).c_str());
             const std::string v = std::to_string(n) + (accuracies.empty() ? "" : "  (" +
                                   std::to_string(static_cast<int>(std::lround(n / static_cast<double>(accuracies.size())))) +
-                                  " pro Partie)");
+                                  tr(" pro Partie)"));
             const float vw = ImGui::GetFont()->CalcTextSizeA(15 * s, FLT_MAX, 0.0f, v.c_str()).x;
             dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(rp.x + ImGui::GetContentRegionAvail().x - vw, rp.y),
                         Theme::u32(c.textMuted), v.c_str());
@@ -210,7 +212,7 @@ void GuiApp::panelStats() {
 
     // --- Eroeffnungen ----------------------------------------------------------------------
     if (!byOpening.empty()) {
-        sectionTitle("Deine Eröffnungen");
+        sectionTitle(tr("Deine Eröffnungen"));
         std::vector<std::pair<std::string, Tally>> ops(byOpening.begin(), byOpening.end());
         std::sort(ops.begin(), ops.end(), [](const auto& a, const auto& b) { return a.second.games() > b.second.games(); });
         if (ops.size() > 8) ops.resize(8);
@@ -220,7 +222,7 @@ void GuiApp::panelStats() {
             const std::string right = std::to_string(t.games()) + "×, " + std::to_string(static_cast<int>(std::lround(t.score()))) + " %";
             const float rw = ImGui::GetFont()->CalcTextSizeA(15 * s, FLT_MAX, 0.0f, right.c_str()).x;
             dl->PushClipRect(p0, ImVec2(p0.x + fullW - rw - 10 * s, p0.y + 24 * s), true);
-            dl->AddText(ImGui::GetFont(), 16 * s, p0, Theme::u32(c.text), name.c_str());
+            dl->AddText(ImGui::GetFont(), 16 * s, p0, Theme::u32(c.text), localizedOpeningName(name, english()).c_str());
             dl->PopClipRect();
             dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(p0.x + fullW - rw, p0.y), Theme::u32(c.textMuted), right.c_str());
             ImGui::Dummy(ImVec2(fullW, 26 * s));

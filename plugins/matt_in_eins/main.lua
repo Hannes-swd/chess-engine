@@ -1,11 +1,16 @@
--- Matt in 1: Weiß zieht und setzt matt. In jeder Stellung gibt es genau EINEN Zug, der matt setzt –
+-- Matt in 1: Wer am Zug ist, setzt matt. In jeder Stellung gibt es genau EINEN Zug, der matt setzt –
 -- andere Schachgebote gibt es oft auch, aber nur einer beendet die Partie. Du hast einen Versuch.
 --
 -- Die 237 Stellungen stammen aus echten (schwachen) Engine-Partien und sind gemischt:
 -- Dame, Turm, Läufer, Springer, Bauer, Grundreihenmatt, Abzugsschach, Umwandlung, ersticktes Matt.
--- Jede wurde geprüft: genau ein Mattzug, Weiß steht nicht im Schach.
+-- Jede wurde geprüft: genau ein Mattzug, Weiß steht nicht im Schach. Die Hälfte der Aufgaben wird gespiegelt,
+-- dann zieht Schwarz. Mit "player_moves_first" in plugin.json spielst du immer die Seite am Zug.
 
-local kinds = {
+local kinds = lang == "en" and {
+  queen = "queen mate", rook = "rook mate", bishop = "bishop mate", knight = "knight mate",
+  pawn = "pawn mate", Grundreihe = "back-rank mate", ["Abzug"] = "discovered mate",
+  ["Umwandlung"] = "mate with promotion", erstickt = "smothered mate",
+} or {
   queen = "Damenmatt", rook = "Turmmatt", bishop = "Läufermatt", knight = "Springermatt",
   pawn = "Bauernmatt", Grundreihe = "Grundreihenmatt", ["Abzug"] = "Matt durch Abzug",
   ["Umwandlung"] = "Matt mit Umwandlung", erstickt = "Ersticktes Matt",
@@ -251,22 +256,57 @@ local puzzles = {
   { "8/2R5/1R2p2k/4P3/5pKP/5Pp1/6P1/8 w - - 1 48", "Rxe6#", "rook" },
 }
 
-local current
+local current, solution, mover
+
+-- Brett spiegeln und Farben tauschen: aus "Weiß setzt matt" wird "Schwarz setzt matt"
+local function swapCase(s)
+  return (s:gsub("%a", function(c)
+    if c == c:upper() then return c:lower() else return c:upper() end
+  end))
+end
+
+local function mirrorFen(fen)
+  local boardPart, side, castle, ep, half, full = fen:match("^(%S+) (%S+) (%S+) (%S+) (%S+) (%S+)$")
+  local rows = {}
+  for row in boardPart:gmatch("[^/]+") do table.insert(rows, 1, swapCase(row)) end
+  local c = "-"
+  if castle ~= "-" then
+    c = ""
+    local swapped = swapCase(castle)
+    for _, k in ipairs({ "K", "Q", "k", "q" }) do
+      if swapped:find(k, 1, true) then c = c .. k end
+    end
+  end
+  if ep ~= "-" then ep = ep:sub(1, 1) .. tostring(9 - tonumber(ep:sub(2, 2))) end
+  return table.concat(rows, "/") .. " " .. (side == "w" and "b" or "w") .. " " .. c .. " " .. ep .. " " .. half .. " " .. full
+end
+
+-- Zug in Notation spiegeln: nur die Reihen ändern sich (Dg7# -> Dg2#)
+local function mirrorSan(san)
+  return (san:gsub("%d", function(d) return tostring(9 - tonumber(d)) end))
+end
 
 return {
   on_load = function(rules)
     current = puzzles[math.random(#puzzles)]
-    rules.set_start(current[1])
-    rules.set_name("Matt in 1: Weiß zieht und setzt matt")
+    if math.random(2) == 1 then
+      rules.set_start(current[1])
+      solution, mover = current[2], "white"
+      rules.set_name(lang == "en" and "Mate in 1: White to move and mate" or "Matt in 1: Weiß zieht und setzt matt")
+    else
+      rules.set_start(mirrorFen(current[1]))
+      solution, mover = mirrorSan(current[2]), "black"
+      rules.set_name(lang == "en" and "Mate in 1: Black to move and mate" or "Matt in 1: Schwarz zieht und setzt matt")
+    end
   end,
 
   -- Ein Versuch: Matt gefunden -> gewonnen, sonst ist die Aufgabe vorbei und die Lösung wird gezeigt
   check_end = function(board, info)
     if info.ply == 0 then return end
-    local kind = kinds[current[3]] or "Matt"
+    local kind = kinds[current[3]] or (lang == "en" and "mate" or "Matt")
     if board:checkmate() then
-      return "white", "Matt gefunden: " .. current[2] .. " (" .. kind .. ")"
+      return mover, (lang == "en" and "Mate found: " or "Matt gefunden: ") .. solution .. " (" .. kind .. ")"
     end
-    return "black", "Kein Matt – gesucht war " .. current[2] .. " (" .. kind .. ")"
+    return (mover == "white") and "black" or "white", (lang == "en" and "No mate – the move was " or "Kein Matt – gesucht war ") .. solution .. " (" .. kind .. ")"
   end,
 }

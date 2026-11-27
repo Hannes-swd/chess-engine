@@ -125,7 +125,9 @@ std::string trainingToJson(const TrainingData& d) {
     mapJson("openingRuns", d.openingRuns);
     out += ",\n";
     mapJson("openingClean", d.openingClean);
-    return out + "\n}\n";
+    out += ",\n  \"harvested\": [";
+    for (size_t i = 0; i < d.harvested.size(); ++i) out += std::string(i ? ", " : "") + "\"" + escaped(d.harvested[i]) + "\"";
+    return out + "]\n}\n";
 }
 
 bool trainingFromJson(const std::string& text, TrainingData& d) {
@@ -155,6 +157,9 @@ bool trainingFromJson(const std::string& text, TrainingData& d) {
     };
     readMap("openingRuns", d.openingRuns);
     readMap("openingClean", d.openingClean);
+    if (const json::Value* h = v->find("harvested"); h && h->isArray())
+        for (const json::Value& e : h->asArray())
+            if (e.isString()) d.harvested.push_back(e.asString());
     return true;
 }
 

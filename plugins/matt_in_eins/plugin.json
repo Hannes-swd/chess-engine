@@ -1,7 +1,11 @@
 {
   "name": "Matt in 1",
-  "description": "Weiß zieht und setzt matt – es gibt genau einen Zug, der matt setzt, und du hast einen Versuch. 237 Stellungen aus echten Partien: Dame, Turm, Läufer, Springer, Bauer, Grundreihe, Abzug, Umwandlung, ersticktes Matt. Am besten mit Weiß oder zu zweit am Brett spielen.",
+  "description": "Wer am Zug ist, setzt matt – es gibt genau einen Zug, der matt setzt, und du hast einen Versuch. Du spielst automatisch die Seite am Zug, mal Weiß, mal Schwarz. 237 Stellungen aus echten Partien: Dame, Turm, Läufer, Springer, Bauer, Grundreihe, Abzug, Umwandlung, ersticktes Matt.",
+  "name_en": "Mate in 1",
+  "description_en": "Whoever is to move mates – there is exactly one mating move and you get one try. You automatically play the side to move, sometimes White, sometimes Black. 237 positions from real games: queen, rook, bishop, knight, pawn, back rank, discovered check, promotion, smothered mate.",
+  "color": "#4B6B4F",
   "author": "ChessEngine",
   "version": "1.0",
-  "priority": 5
+  "priority": 5,
+  "player_moves_first": true
 }

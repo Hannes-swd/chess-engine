@@ -2,6 +2,7 @@
 // Moeglichst Icons (Google Material Icons) statt Text; jede Schaltflaeche hat einen Tooltip.
 
 #include "ui/gui_app.hpp"
+#include "ui/i18n.hpp"
 
 #include "core/notation.hpp"
 #include "core/openings.hpp"
@@ -173,7 +174,7 @@ void GuiApp::drawTopBar(float height) {
     ImGui::SetCursorPos(ImVec2(x, btnY));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     if (iconButton("##navtoggle", settings_.sidebarExpanded ? icon::menuOpen : icon::menu,
-                   settings_.sidebarExpanded ? "Seitenleiste einklappen" : "Seitenleiste ausklappen")) {
+                   settings_.sidebarExpanded ? tr("Seitenleiste einklappen") : tr("Seitenleiste ausklappen"))) {
         settings_.sidebarExpanded = !settings_.sidebarExpanded;
         saveSettings();
     }
@@ -191,19 +192,19 @@ void GuiApp::drawTopBar(float height) {
     const Icon* stateIcon = nullptr;
     ImU32 stateCol = Theme::u32(c.text);
     if (out.over()) {
-        state = resultTitle(out) + ", " + out.reason;
+        state = resultTitle(out) + ", " + tr(out.reason);
         stateIcon = &icon::trophy;
         stateCol = Theme::u32(c.accent);
     } else if (botThinking()) {
-        state = bot_->profile().name + " denkt nach";
+        state = bot_->profile().displayName(english()) + tr(" denkt nach");
         stateIcon = &icon::psychology;
     } else if (!isLive()) {
-        state = "Zug " + std::to_string(viewPly()) + " von " + std::to_string(game_.ply());
+        state = tr("Zug ") + std::to_string(viewPly()) + tr(" von ") + std::to_string(game_.ply());
         stateIcon = &icon::history;
     } else {
-        state = game_.position().sideToMove() == Color::White ? "Weiß am Zug" : "Schwarz am Zug";
+        state = game_.position().sideToMove() == Color::White ? tr("Weiß am Zug") : tr("Schwarz am Zug");
         if (game_.position().inCheck(game_.position().sideToMove()) && settings_.checkGlow) {
-            state += ", Schach";
+            state += tr(", Schach");
             stateCol = Theme::u32(c.qBlunder);
         }
     }
@@ -226,19 +227,19 @@ void GuiApp::drawTopBar(float height) {
         const bool rated = isRated();
         const ImVec2 a(wp.x + x, wp.y);
         x += iconAt(x, 20 * s, Theme::u32(rated ? c.qBest : c.textMuted), rated ? icon::rated : icon::unrated) + 5 * s;
-        x += textAt(x, f, fs, Theme::u32(c.textMuted), rated ? "Gewertet" : "Ungewertet");
+        x += textAt(x, f, fs, Theme::u32(c.textMuted), rated ? tr("Gewertet") : tr("Ungewertet"));
         if (ImGui::IsMouseHoveringRect(a, ImVec2(wp.x + x, wp.y + height)))
-            ImGui::SetTooltip("%s", rated ? "Diese Partie zählt für deine Elo." : unratedReason().c_str());
+            ImGui::SetTooltip("%s", rated ? tr("Diese Partie zählt für deine Elo.") : unratedReason().c_str());
     }
 
     // --- rechts: Zen, Design, Engine, Bilanz, Elo (von rechts nach links) --------
     float xr = W - 14 * s - btn;
     ImGui::SetCursorPos(ImVec2(xr, btnY));
-    if (iconButton("##zen", icon::fullscreen, "Zen-Modus: nur das Brett (Z)")) zen_ = true;
+    if (iconButton("##zen", icon::fullscreen, tr("Zen-Modus: nur das Brett (Z)"))) zen_ = true;
     xr -= btn + 4 * s;
     ImGui::SetCursorPos(ImVec2(xr, btnY));
     if (iconButton("##theme", settings_.darkTheme ? icon::lightMode : icon::darkMode,
-                   settings_.darkTheme ? "Helles Design" : "Dunkles Design")) {
+                   settings_.darkTheme ? tr("Helles Design") : tr("Dunkles Design"))) {
         settings_.darkTheme = !settings_.darkTheme;
         applyTheme();
         saveSettings();
@@ -265,7 +266,7 @@ void GuiApp::drawTopBar(float height) {
     xb += textAt(xb, hf, 19 * s, Theme::u32(c.textMuted), draws.c_str()) + gapN;
     textAt(xb, hf, 19 * s, Theme::u32(c.qBlunder), losses.c_str());
     if (ImGui::IsMouseHoveringRect(ImVec2(wp.x + recordX, wp.y), ImVec2(wp.x + recordX + recordW, wp.y + height)))
-        ImGui::SetTooltip("Siege, Remis und Niederlagen gegen Bots\n%d gewertete Partien", player_.games);
+        ImGui::SetTooltip(tr("Siege, Remis und Niederlagen gegen Bots\n%d gewertete Partien"), player_.games);
     xr = recordX - 30 * s;
 
     // Elo: Abzeichen, Zahl, Trend
@@ -290,7 +291,7 @@ void GuiApp::drawTopBar(float height) {
         textAt(xe, f, fs, trendCol, delta.c_str());
     }
     if (ImGui::IsMouseHoveringRect(ImVec2(wp.x + blockX, wp.y), ImVec2(wp.x + blockX + blockW, wp.y + height)))
-        ImGui::SetTooltip("Deine Elo, lokal gegen Bots\nHöchstwert %d, %d Partien", player_.peak, player_.games);
+        ImGui::SetTooltip(tr("Deine Elo, lokal gegen Bots\nHöchstwert %d, %d Partien"), player_.peak, player_.games);
     (void)x;
 }
 
@@ -312,10 +313,10 @@ void GuiApp::drawNav(float width) {
         const char* label;
     };
     const Item items[] = {
-        {Mode::Play, &icon::play, "Spielen"},         {Mode::Analysis, &icon::analysis, "Analyse"},
-        {Mode::Training, &icon::training, "Training"}, {Mode::Bots, &icon::bot, "Bots"},
-        {Mode::Games, &icon::games, "Partien"},       {Mode::Stats, &icon::stats, "Statistik"},
-        {Mode::Plugins, &icon::plugin, "Plugins"},    {Mode::Settings, &icon::settings, "Einstellungen"},
+        {Mode::Home, &icon::home, tr("Start")},     {Mode::Play, &icon::play, tr("Spielen")},         {Mode::Analysis, &icon::analysis, tr("Analyse")},
+        {Mode::Training, &icon::training, tr("Training")}, {Mode::Bots, &icon::bot, tr("Bots")},
+        {Mode::Games, &icon::games, tr("Partien")},       {Mode::Stats, &icon::stats, tr("Statistik")},
+        {Mode::Plugins, &icon::plugin, tr("Plugins")},    {Mode::Settings, &icon::settings, tr("Einstellungen")},
     };
     ImGui::SetCursorPos(ImVec2(0, 12 * s));
     for (const Item& it : items)
@@ -324,15 +325,15 @@ void GuiApp::drawNav(float width) {
     // Unten: Design, Zen, Ein-/Ausklappen
     // Drei Eintraege plus Abstand zum unteren Rand; dieselbe Hoehe wie navItem, sonst wird abgeschnitten
     ImGui::SetCursorPos(ImVec2(0, H - 3 * kNavItemHeight * s - 16 * s));
-    if (navItem(settings_.darkTheme ? icon::lightMode : icon::darkMode, settings_.darkTheme ? "Hell" : "Dunkel", false,
+    if (navItem(settings_.darkTheme ? icon::lightMode : icon::darkMode, settings_.darkTheme ? tr("Hell") : tr("Dunkel"), false,
                 width)) {
         settings_.darkTheme = !settings_.darkTheme;
         applyTheme();
         saveSettings();
     }
-    if (navItem(icon::fullscreen, "Zen-Modus", false, width)) zen_ = true;
+    if (navItem(icon::fullscreen, tr("Zen-Modus"), false, width)) zen_ = true;
     if (navItem(settings_.sidebarExpanded ? icon::menuOpen : icon::menu,
-                settings_.sidebarExpanded ? "Einklappen" : "Ausklappen", false, width)) {
+                settings_.sidebarExpanded ? tr("Einklappen") : tr("Ausklappen"), false, width)) {
         settings_.sidebarExpanded = !settings_.sidebarExpanded;
         saveSettings();
     }
@@ -350,28 +351,28 @@ void GuiApp::drawRightPanel() {
     switch (mode_) {
         case Mode::Play: panelPlay(); break;
         case Mode::Analysis:
-            panelHeader(icon::analysis, "Analyse");
+            panelHeader(icon::analysis, tr("Analyse"));
             tabAnalysis();
             break;
         case Mode::Bots: panelBots(); break;
         case Mode::Games:
-            panelHeader(icon::games, "Partien");
+            panelHeader(icon::games, tr("Partien"));
             tabGames();
             break;
         case Mode::Training:
-            panelHeader(icon::training, "Training");
+            panelHeader(icon::training, tr("Training"));
             panelTraining();
             break;
         case Mode::Stats:
-            panelHeader(icon::stats, "Statistik");
+            panelHeader(icon::stats, tr("Statistik"));
             panelStats();
             break;
         case Mode::Plugins:
-            panelHeader(icon::plugin, "Plugins");
+            panelHeader(icon::plugin, tr("Plugins"));
             panelPlugins();
             break;
         case Mode::Settings:
-            panelHeader(icon::settings, "Einstellungen");
+            panelHeader(icon::settings, tr("Einstellungen"));
             tabSettings();
             break;
     }
@@ -386,9 +387,9 @@ void GuiApp::panelPlay() {
     const float s = theme_.scale;
     const float w = ImGui::GetContentRegionAvail().x / 2;
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, ImGui::GetStyle().ItemSpacing.y));
-    if (iconTab(icon::add, "Neue Partie", playTab_ == 0, w)) playTab_ = 0;
+    if (iconTab(icon::add, tr("Neue Partie"), playTab_ == 0, w)) playTab_ = 0;
     ImGui::SameLine();
-    if (iconTab(icon::history, "Partie", playTab_ == 1, w)) playTab_ = 1;
+    if (iconTab(icon::history, tr("Partie"), playTab_ == 1, w)) playTab_ = 1;
     ImGui::PopStyleVar();
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y - 4 * s), ImVec2(p.x + 2 * w, p.y - 4 * s),
@@ -506,8 +507,8 @@ bool GuiApp::botRow(const char* id, const BotProfile* p, bool selected, bool sho
     const float x0off = pad + 2 * r + 12 * s;
     const float textW = w - x0off - eloW - pad;
 
-    const std::string name = p ? p->name : "Zu zweit am Brett";
-    const std::string desc = p ? p->description : "Zwei Spieler am selben Rechner. Wird nicht gewertet.";
+    const std::string name = p ? p->displayName(english()) : tr("Zu zweit am Brett");
+    const std::string desc = p ? p->displayDescription(english()) : tr("Zwei Spieler am selben Rechner. Wird nicht gewertet.");
     ImFont* sf = theme_.strong ? theme_.strong : ImGui::GetFont();
     ImFont* f = ImGui::GetFont();
     const float fs = ImGui::GetFontSize();
@@ -592,7 +593,7 @@ void GuiApp::playSetup() {
         dl->AddRect(p0, ImVec2(p0.x + w, p0.y + h), Theme::u32(alpha(c.accent, 0.6f)), 8 * s);
         Theme::glyphCentered(dl, theme_.body, 26 * s, ImVec2(p0.x + 24 * s, p0.y + h * 0.5f), Theme::u32(c.accent),
                              icon::playCircle);
-        dl->AddText(theme_.strong, 17 * s, ImVec2(p0.x + 48 * s, p0.y + 11 * s), Theme::u32(c.text), "Partie fortsetzen");
+        dl->AddText(theme_.strong, 17 * s, ImVec2(p0.x + 48 * s, p0.y + 11 * s), Theme::u32(c.text), tr("Partie fortsetzen"));
         dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(p0.x + 48 * s, p0.y + 34 * s), Theme::u32(c.textMuted),
                     resumeInfo_.c_str());
         if (clicked) resumeGame();
@@ -603,49 +604,49 @@ void GuiApp::playSetup() {
         std::string names;
         for (const auto& p : plugins_)
             if (std::find(settings_.plugins.begin(), settings_.plugins.end(), p.id) != settings_.plugins.end())
-                names += (names.empty() ? "" : ", ") + p.name;
+                names += (names.empty() ? "" : ", ") + p.displayName(english());
         ImGui::Dummy(ImVec2(0, 4 * s));
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Text, c.accent);
-        if (ImGui::Button((std::string(icon::plugin) + "  Mit Plugins: " + names).c_str())) mode_ = Mode::Plugins;
+        if (ImGui::Button((std::string(icon::plugin) + tr("  Mit Plugins: ") + names).c_str())) mode_ = Mode::Plugins;
         ImGui::PopStyleColor(2);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Plugins ändern die Regeln. Diese Partien werden nicht gewertet.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Plugins ändern die Regeln. Diese Partien werden nicht gewertet."));
     }
 
     // --- Bedenkzeit: alle Varianten direkt sichtbar ------------------------------
-    sectionTitle("Bedenkzeit");
+    sectionTitle(tr("Bedenkzeit"));
     const float w4 = (ImGui::GetContentRegionAvail().x - 3 * spX) / 4;
     for (int i = 0; i < kTimePresetCount; ++i) {
         if (i % 4) ImGui::SameLine();
         const TimePreset& p = kTimePresets[i];
-        std::string big = p.label, small = p.kind;
-        if (p.minutes == 0) big = "frei", small = "ohne Uhr";
-        if (p.minutes < 0) big = selectedTimeControl().label(), small = "eigene";
+        std::string big = p.label, small = tr(p.kind);
+        if (p.minutes == 0) big = tr("frei"), small = tr("ohne Uhr");
+        if (p.minutes < 0) big = selectedTimeControl().label(), small = tr("eigene");
         if (p.minutes < 0 && tcPreset_ != i) big = "…";
         const std::string id = "##tc" + std::to_string(i);
         if (timeChip(id.c_str(), big.c_str(), small.c_str(), tcPreset_ == i, ImVec2(w4, 54 * s))) tcPreset_ = i;
     }
     if (kTimePresets[std::clamp(tcPreset_, 0, kTimePresetCount - 1)].minutes < 0) {
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderFloat("##min", &customMinutes_, 0.25f, 180.0f, "%.1f Minuten", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("##min", &customMinutes_, 0.25f, 180.0f, tr("%.1f Minuten"), ImGuiSliderFlags_Logarithmic);
         ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderInt("##inc", &customIncrement_, 0, 60, "+ %d s pro Zug");
+        ImGui::SliderInt("##inc", &customIncrement_, 0, 60, tr("+ %d s pro Zug"));
     }
 
     // --- Gegner: eine Zeile, Klick oeffnet die Auswahl -----------------------------
     const bool hotseat = selectedProfile_ < 0 || selectedProfile_ >= static_cast<int>(profiles_.size());
     const BotProfile* opp = hotseat ? nullptr : &profiles_[static_cast<size_t>(selectedProfile_)];
-    sectionTitle("Gegner");
+    sectionTitle(tr("Gegner"));
     if (!hotseat) {
         const float btn = 22.0f * s + 2 * ImGui::GetStyle().FramePadding.y;
         ImGui::SameLine(ImGui::GetContentRegionMax().x - btn);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        if (iconButton("##tune", icon::tune, "Diesen Bot anpassen")) mode_ = Mode::Bots;
+        if (iconButton("##tune", icon::tune, tr("Diesen Bot anpassen"))) mode_ = Mode::Bots;
         ImGui::PopStyleColor();
     }
     const float panelW = ImGui::GetContentRegionAvail().x;
     if (botRow("##opp", opp, false, true)) ImGui::OpenPopup("##pickopp");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Gegner wechseln");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Gegner wechseln"));
     ImGui::SetNextWindowSize(ImVec2(panelW + 16 * s, 0));
     if (ImGui::BeginPopup("##pickopp")) {
         if (botRow("##pickhot", nullptr, hotseat, false)) {
@@ -663,10 +664,10 @@ void GuiApp::playSetup() {
     }
 
     // --- Farbe: echte Koenige statt Scheiben ----------------------------------------
-    sectionTitle("Du spielst");
+    sectionTitle(tr("Du spielst"));
     ImGui::BeginDisabled(hotseat);
     const float w3 = (ImGui::GetContentRegionAvail().x - 2 * spX) / 3;
-    const char* tips[] = {"Weiß", "Schwarz", "Zufällige Farbe"};
+    const char* tips[] = {tr("Weiß"), tr("Schwarz"), tr("Zufällige Farbe")};
     PieceType king;
     king.id = "king";
     king.symbol = 'K';
@@ -698,7 +699,7 @@ void GuiApp::playSetup() {
     // --- Start ---------------------------------------------------------------------
     ImGui::Dummy(ImVec2(0, 10 * s));
     ImGui::PushFont(theme_.strong, 19.0f);
-    if (primaryButton(withIcon(icon::start, "Partie starten").c_str(), ImVec2(-FLT_MIN, 54 * s))) {
+    if (primaryButton(withIcon(icon::start, tr("Partie starten")).c_str(), ImVec2(-FLT_MIN, 54 * s))) {
         startNewGame();
         playTab_ = 1;
     }
@@ -706,12 +707,12 @@ void GuiApp::playSetup() {
 
     // --- Was die Partie fuer deine Elo bedeutet ---------------------------------------
     if (!hotseat) {
-        sectionTitle("Für deine Elo");
+        sectionTitle(tr("Für deine Elo"));
         const int botElo = estimatedBotElo(*opp, stockfish_ != nullptr);
         const int d[3] = {eloDelta(player_.rating, botElo, 1.0, player_.games),
                           eloDelta(player_.rating, botElo, 0.5, player_.games),
                           eloDelta(player_.rating, botElo, 0.0, player_.games)};
-        const char* labels[3] = {"Sieg", "Remis", "Niederlage"};
+        const char* labels[3] = {tr("Sieg"), tr("Remis"), tr("Niederlage")};
         const ImVec4 cols[3] = {c.qBest, c.textMuted, c.qBlunder};
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -724,7 +725,7 @@ void GuiApp::playSetup() {
             dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(x, p0.y + 28 * s), Theme::u32(c.textMuted), labels[i]);
         }
         ImGui::Dummy(ImVec2(0, 48 * s));
-        if (!stockfish_) ImGui::TextDisabled("Ohne Stockfish spielt die eingebaute Engine (schwächer).");
+        if (!stockfish_) ImGui::TextDisabled(tr("Ohne Stockfish spielt die eingebaute Engine (schwächer)."));
     }
     ImGui::EndChild();
 }
@@ -749,7 +750,7 @@ void GuiApp::playMoves() {
     {
         std::string head = pluginGame_ ? game_.variant().name : std::string();
         if (!pluginGame_ && !fenGame_ && n > 0)
-            if (const OpeningMatch m = identifyOpening(game_.sanMoves()); m.opening) head = m.opening->name;
+            if (const OpeningMatch m = identifyOpening(game_.sanMoves()); m.opening) head = m.opening->displayName(english());
         if (!head.empty()) {
             ImGui::PushFont(theme_.strong, 15.0f);
             ImGui::PushTextWrapPos(0);
@@ -762,10 +763,9 @@ void GuiApp::playMoves() {
         ImGui::Dummy(ImVec2(0, 10 * s));
         ImGui::PushTextWrapPos(0);
         const char* first = game_.startPosition().fullmoveNumber() > 1
-                                ? "Die Partie beginnt in einer vorgegebenen Stellung. Schau sie dir in Ruhe an: Wo "
-                                  "stehen die Figuren, was droht, welcher Zug passt?"
-                            : bot_ ? "Mach den ersten Zug – oder warte auf den Bot."
-                                   : "Zieh eine Figur, um die Partie zu beginnen.";
+                                ? tr("Die Partie beginnt in einer vorgegebenen Stellung. Schau sie dir in Ruhe an: Wo stehen die Figuren, was droht, welcher Zug passt?")
+                            : bot_ ? tr("Mach den ersten Zug – oder warte auf den Bot.")
+                                   : tr("Zieh eine Figur, um die Partie zu beginnen.");
         ImGui::TextColored(c.textMuted, "%s", first);
         ImGui::PopTextWrapPos();
     }
@@ -818,13 +818,13 @@ void GuiApp::playMoves() {
         ImGui::GetWindowDrawList()->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + iconH), Theme::u32(c.surfaceRaised), 8 * s);
         const float w4 = w / 4;
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        if (iconButton("##first", icon::first, "Zum Anfang (Pos1)", false, w4, viewPly() > 0)) setView(0);
+        if (iconButton("##first", icon::first, tr("Zum Anfang (Pos1)"), false, w4, viewPly() > 0)) setView(0);
         ImGui::SameLine(0, 0);
-        if (iconButton("##prev", icon::prev, "Zug zurück (←)", false, w4, viewPly() > 0)) setView(viewPly() - 1);
+        if (iconButton("##prev", icon::prev, tr("Zug zurück (←)"), false, w4, viewPly() > 0)) setView(viewPly() - 1);
         ImGui::SameLine(0, 0);
-        if (iconButton("##next", icon::next, "Zug vor (→)", false, w4, viewPly() < n)) setView(viewPly() + 1);
+        if (iconButton("##next", icon::next, tr("Zug vor (→)"), false, w4, viewPly() < n)) setView(viewPly() + 1);
         ImGui::SameLine(0, 0);
-        if (iconButton("##last", icon::last, "Aktuelle Stellung (Ende)", false, w4, !isLive())) setView(n);
+        if (iconButton("##last", icon::last, tr("Aktuelle Stellung (Ende)"), false, w4, !isLive())) setView(n);
         ImGui::PopStyleColor();
     }
 
@@ -840,17 +840,17 @@ void GuiApp::playMoves() {
     const bool hintPossible = !over && (!bot_ || game_.position().sideToMove() != botColor_) && !engineBusy();
     std::vector<Action> actions;
     actions.push_back({"##undo", &icon::undo,
-                       settings_.undo ? "Zug zurücknehmen (Strg+Z)" : "Zurücknehmen ist in den Einstellungen aus",
+                       settings_.undo ? tr("Zug zurücknehmen (Strg+Z)") : tr("Zurücknehmen ist in den Einstellungen aus"),
                        settings_.undo && n > 0, 0});
-    actions.push_back({"##flip", &icon::flip, "Brett drehen (F)", true, 1});
+    actions.push_back({"##flip", &icon::flip, tr("Brett drehen (F)"), true, 1});
     if (settings_.hintButton)
         actions.push_back({"##hint", &icon::hint,
-                           hintRunning() ? "Engine überlegt …"
-                                         : std::string("Tipp zeigen (H)") + (bot_ ? ", Partie wird ungewertet" : ""),
+                           hintRunning() ? tr("Engine überlegt …")
+                                         : std::string(tr("Tipp zeigen (H)")) + (bot_ ? tr(", Partie wird ungewertet") : ""),
                            hintPossible, 2});
     if (settings_.annotations)
-        actions.push_back({"##clear", &icon::clear, "Eigene Pfeile und Kreise löschen", !board_.annotations().empty(), 3});
-    actions.push_back({"##draw", &icon::draw, bot_ ? "Remis anbieten" : "Remis vereinbaren", !over && n >= 2, 4});
+        actions.push_back({"##clear", &icon::clear, tr("Eigene Pfeile und Kreise löschen"), !board_.annotations().empty(), 3});
+    actions.push_back({"##draw", &icon::draw, bot_ ? tr("Remis anbieten") : tr("Remis vereinbaren"), !over && n >= 2, 4});
 
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     for (size_t i = 0; i < actions.size(); ++i) {
@@ -865,22 +865,22 @@ void GuiApp::playMoves() {
             case 4: offerDraw(); break;
         }
     }
-    const float resignW = ImGui::CalcTextSize("Aufgeben").x + 44 * s;
+    const float resignW = ImGui::CalcTextSize(tr("Aufgeben")).x + 44 * s;
     ImGui::SameLine(ImGui::GetContentRegionMax().x - resignW);
     ImGui::BeginDisabled(over || n == 0);
     ImGui::PushStyleColor(ImGuiCol_Text, c.textMuted);
-    if (ImGui::Button(withIcon(icon::flag, "Aufgeben").c_str(), ImVec2(resignW, iconH))) ImGui::OpenPopup("##resign");
+    if (ImGui::Button(withIcon(icon::flag, tr("Aufgeben")).c_str(), ImVec2(resignW, iconH))) ImGui::OpenPopup("##resign");
     ImGui::PopStyleColor();
     ImGui::EndDisabled();
     ImGui::PopStyleColor();
     if (ImGui::BeginPopup("##resign")) {
-        ImGui::TextUnformatted("Wirklich aufgeben?");
-        if (primaryButton(withIcon(icon::flag, "Aufgeben").c_str())) {
+        ImGui::TextUnformatted(tr("Wirklich aufgeben?"));
+        if (primaryButton(withIcon(icon::flag, tr("Aufgeben")).c_str())) {
             resign();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Weiterspielen")) ImGui::CloseCurrentPopup();
+        if (ImGui::Button(tr("Weiterspielen"))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
@@ -891,7 +891,7 @@ void GuiApp::playMoves() {
         if (settings_.botInfo && lastBotInfo_.size() > lastBotSan_.size()) info += lastBotInfo_.substr(lastBotSan_.size());
         if (!lastBotSan_.empty()) {
             ImGui::PushTextWrapPos(0);
-            ImGui::TextColored(c.textMuted, "%s: %s", bot_->profile().name.c_str(), info.c_str());
+            ImGui::TextColored(c.textMuted, "%s: %s", bot_->profile().displayName(english()).c_str(), info.c_str());
             ImGui::PopTextWrapPos();
         }
     }
@@ -903,10 +903,10 @@ void GuiApp::playMoves() {
 
 void GuiApp::panelBots() {
     const float s = theme_.scale;
-    panelHeader(icon::bot, "Bots");
+    panelHeader(icon::bot, tr("Bots"));
     ImGui::BeginChild("##bots", ImVec2(0, 0), ImGuiChildFlags_None);
     ImGui::PushTextWrapPos(0);
-    ImGui::TextDisabled("Die Elo ist geschätzt. Klick auf einen Bot, um ihn auszuwählen.");
+    ImGui::TextDisabled(tr("Die Elo ist geschätzt. Klick auf einen Bot, um ihn auszuwählen."));
     ImGui::PopTextWrapPos();
     ImGui::Dummy(ImVec2(0, 4 * s));
     for (size_t i = 0; i < profiles_.size(); ++i) {
@@ -915,21 +915,21 @@ void GuiApp::panelBots() {
             selectedProfile_ = static_cast<int>(i);
     }
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    if (ImGui::Button((std::string(icon::personAdd) + "  Eigenen Bot anlegen").c_str())) createOwnBot();
+    if (ImGui::Button((std::string(icon::personAdd) + tr("  Eigenen Bot anlegen")).c_str())) createOwnBot();
     ImGui::PopStyleColor();
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Kopie des gewählten Bots – Name, Stärke und Stil frei einstellbar");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(tr("Kopie des gewählten Bots – Name, Stärke und Stil frei einstellbar"));
 
     if (selectedProfile_ >= 0 && selectedProfile_ < static_cast<int>(profiles_.size())) {
         ImGui::Dummy(ImVec2(0, 8 * s));
         const std::string label =
-            withIcon(icon::start, "Gegen " + profiles_[static_cast<size_t>(selectedProfile_)].name + " spielen");
+            withIcon(icon::start, tr("Gegen ") + profiles_[static_cast<size_t>(selectedProfile_)].displayName(english()) + tr(" spielen"));
         ImGui::PushFont(theme_.strong, 0.0f);
         if (primaryButton(label.c_str(), ImVec2(-FLT_MIN, 46 * s))) {
             mode_ = Mode::Play;
             playTab_ = 0;  // Zeit und Farbe noch waehlen, dann starten
         }
         ImGui::PopFont();
-        sectionTitle("Anpassen");
+        sectionTitle(tr("Anpassen"));
         botEditor();
     }
     ImGui::EndChild();

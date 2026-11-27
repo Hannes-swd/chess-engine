@@ -83,6 +83,8 @@ std::string AssistSettings::toJson() const {
     for (size_t i = 0; i < f.size(); ++i)
         s += std::string("  \"") + f[i].first + "\": " + (this->*(f[i].second) ? "true" : "false") + ",\n";
     s += "  \"boardTheme\": " + std::to_string(boardTheme) + ",\n";
+    s += "  \"pieceSet\": " + std::to_string(pieceSet) + ",\n";
+    s += "  \"language\": " + std::to_string(language) + ",\n";
     s += "  \"plugins\": [";
     for (size_t i = 0; i < plugins.size(); ++i) {
         std::string id;
@@ -100,6 +102,8 @@ bool AssistSettings::fromJson(const std::string& text) {
     if (!v || !v->isObject()) return false;
     for (const auto& [name, member] : fields()) this->*member = v->getBool(name, this->*member);
     boardTheme = static_cast<int>(v->getNumber("boardTheme", boardTheme));
+    pieceSet = static_cast<int>(v->getNumber("pieceSet", pieceSet));
+    language = static_cast<int>(v->getNumber("language", language));
     if (const json::Value* list = v->find("plugins"); list && list->isArray()) {
         plugins.clear();
         for (const json::Value& e : list->asArray())

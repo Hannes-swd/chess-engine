@@ -1,6 +1,8 @@
 {
   "name": "Lehrling",
   "description": "Kennt die Regeln, schaut aber nur einen Zug weit. Lässt Figuren stehen und übersieht Drohungen.",
+  "name_en": "Apprentice",
+  "description_en": "Knows the rules but only looks one move ahead. Leaves pieces hanging and misses threats.",
   "engine": "auto",
   "strength": 600,
   "movetimeMs": 300,

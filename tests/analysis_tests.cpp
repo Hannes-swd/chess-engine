@@ -32,6 +32,13 @@ TEST_CASE(analysis_flags_fools_mate_blunder) {
     // 2... Qh4# ist der beste Zug
     CHECK(a.moves[3].quality == MoveQuality::Best);
     CHECK_EQ(a.moves[3].bestSan, std::string("Qh4#"));
+    // Erklaerungen gibt es auf Deutsch und Englisch
+    for (const MoveReview& r : a.moves) {
+        CHECK(!r.headline.empty() && !r.headlineEn.empty());
+        CHECK(!r.explanation.empty() && !r.explanationEn.empty());
+    }
+    CHECK(a.moves[2].headlineEn.find("blunder") != std::string::npos);
+    CHECK(a.moves[2].headline.find("Patzer") != std::string::npos);
 
     const auto comments = pgnComments(a);
     CHECK_EQ(comments.size(), size_t{4});

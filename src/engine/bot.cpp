@@ -50,6 +50,8 @@ std::optional<BotProfile> parseBotProfile(const json::Value& v, std::string& err
         return std::nullopt;
     }
     p.description = v.getString("description", "");
+    p.nameEn = v.getString("name_en", "");
+    p.descriptionEn = v.getString("description_en", "");
 
     const std::string engine = v.getString("engine", "auto");
     if (engine == "auto")
@@ -155,6 +157,8 @@ std::string botProfileToJson(const BotProfile& p) {
     std::string s = "{\n";
     s += "  \"name\": " + jsonString(p.name) + ",\n";
     s += "  \"description\": " + jsonString(p.description) + ",\n";
+    if (!p.nameEn.empty()) s += "  \"name_en\": " + jsonString(p.nameEn) + ",\n";
+    if (!p.descriptionEn.empty()) s += "  \"description_en\": " + jsonString(p.descriptionEn) + ",\n";
     s += std::string("  \"engine\": \"") + engine + "\",\n";
     s += "  \"strength\": " + num(p.strength) + ",\n";
     s += "  \"skill\": " + num(p.skill) + ",\n";
@@ -292,6 +296,7 @@ Bot::Choice Bot::choose(const Game& game, Engine& engine, const BotContext& ctx)
     }
     limits.multiPv = std::max(1, human ? std::max(model.candidates, profile_.candidates) : profile_.candidates);
     if (!game.variant().hooks.filterMoves.empty()) limits.rootMoves = legal;  // Plugin-Regeln respektieren
+    limits.game = &game;  // eingebaute Engine rechnet dann mit allen Plugin-Regeln
 
     // Im menschlichen Modell rechnet die Engine voll (nur flach); die Schwaeche kommt aus Tiefe und Auswahl
     engine.configureStrength(human ? 20 : profile_.skill, human ? 0 : profile_.elo);

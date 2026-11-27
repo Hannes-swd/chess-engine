@@ -2,6 +2,7 @@
 // eigene Bots anlegen, Stockfish nachtraeglich finden.
 
 #include "ui/gui_app.hpp"
+#include "ui/i18n.hpp"
 
 #include "app/environment.hpp"
 #include "core/notation.hpp"
@@ -70,12 +71,12 @@ void GuiApp::playSounds(const Position& before, const Move& m) {
 void GuiApp::offerDraw() {
     if (game_.outcome().over() || game_.ply() < 2) return;
     if (!bot_) {  // zu zweit am Brett: beide sitzen ja davor
-        game_.setResult({GameResult::Draw, "Remis vereinbart"});
+        game_.setResult({GameResult::Draw, tr("Remis vereinbart")});
         view_ = -1;
         return;
     }
     if (game_.ply() - drawOfferPly_ < 10) {
-        setStatus("Gerade erst angeboten – ein paar Züge warten");
+        setStatus(tr("Gerade erst angeboten – ein paar Züge warten"));
         return;
     }
     drawOfferPly_ = game_.ply();
@@ -88,10 +89,10 @@ void GuiApp::offerDraw() {
     }
     if (accept) {
         pendingBot_.reset();
-        game_.setResult({GameResult::Draw, "Remis vereinbart"});
+        game_.setResult({GameResult::Draw, tr("Remis vereinbart")});
         view_ = -1;
     } else {
-        setStatus(bot_->profile().name + " lehnt das Remis ab");
+        setStatus(bot_->profile().displayName(english()) + tr(" lehnt das Remis ab"));
     }
 }
 
@@ -126,11 +127,11 @@ void GuiApp::loadResume() {
     const auto rec = parsePgn(v->getString("pgn", ""));
     if (!rec || rec->moves.empty()) return;
     resumeText_ = ss.str();
-    std::string opponent = "zu zweit";
+    std::string opponent = tr("zu zweit");
     for (const BotProfile& p : profiles_)
-        if (p.id == v->getString("profile", "")) opponent = "gegen " + p.name;
+        if (p.id == v->getString("profile", "")) opponent = tr("gegen ") + p.displayName(english());
     const int moves = static_cast<int>(rec->moves.size() + 1) / 2;
-    resumeInfo_ = "Partie " + opponent + ", " + std::to_string(moves) + (moves == 1 ? " Zug" : " Züge");
+    resumeInfo_ = tr("Partie ") + opponent + ", " + std::to_string(moves) + (moves == 1 ? tr(" Zug") : tr(" Züge"));
 }
 
 void GuiApp::resumeGame() {
@@ -170,7 +171,7 @@ void GuiApp::resumeGame() {
     lastTick_ = std::chrono::steady_clock::now();
     mode_ = Mode::Play;
     playTab_ = 1;
-    setStatus("Partie fortgesetzt");
+    setStatus(tr("Partie fortgesetzt"));
 }
 
 // ===========================================================================
@@ -187,8 +188,8 @@ void GuiApp::createOwnBot() {
     };
     while (taken("eigener_bot_" + std::to_string(n))) ++n;
     p.id = "eigener_bot_" + std::to_string(n);
-    p.name = n == 1 ? "Mein Bot" : "Mein Bot " + std::to_string(n);
-    p.description = "Eigener Bot – Name, Stärke und Stil unten anpassen und speichern.";
+    p.name = n == 1 ? tr("Mein Bot") : tr("Mein Bot ") + std::to_string(n);
+    p.description = tr("Eigener Bot – Name, Stärke und Stil unten anpassen und speichern.");
     if (!sandbox_) {
         std::ofstream out(env::userBotsDir() / (p.id + ".json"), std::ios::binary);
         out << botProfileToJson(p);
@@ -196,7 +197,7 @@ void GuiApp::createOwnBot() {
     profiles_.push_back(p);
     selectedProfile_ = static_cast<int>(profiles_.size()) - 1;
     mode_ = Mode::Bots;
-    setStatus("Neuer Bot angelegt: " + p.name);
+    setStatus(tr("Neuer Bot angelegt: ") + p.name);
 }
 
 void GuiApp::retryStockfish() {
@@ -205,14 +206,14 @@ void GuiApp::retryStockfish() {
         std::string err;
         stockfish_ = UciEngine::launch(*sf, err);
         if (!stockfish_) {
-            setStatus("Stockfish konnte nicht starten: " + err);
+            setStatus(tr("Stockfish konnte nicht starten: ") + err);
             return;
         }
         engineInfo_ = stockfish_->name();
         analysisDepth_ = 14;
-        setStatus("Stockfish gefunden: " + engineInfo_);
+        setStatus(tr("Stockfish gefunden: ") + engineInfo_);
     } else {
-        setStatus("Stockfish nicht gefunden – stockfish.exe in den Ordner engines legen");
+        setStatus(tr("Stockfish nicht gefunden – stockfish.exe in den Ordner engines legen"));
     }
 }
 

@@ -42,6 +42,12 @@ struct BotProfile {
     std::string id;  // Dateiname ohne .json
     std::string name;
     std::string description;
+    std::string nameEn;         // optional: englischer Name ("name_en")
+    std::string descriptionEn;  // optional: englische Beschreibung ("description_en")
+    const std::string& displayName(bool english) const { return english && !nameEn.empty() ? nameEn : name; }
+    const std::string& displayDescription(bool english) const {
+        return english && !descriptionEn.empty() ? descriptionEn : description;
+    }
     EngineChoice engine = EngineChoice::Auto;
 
     // Menschliches Staerke-Modell: Ziel-Elo 400..3000. Bestimmt Suchtiefe, wie oft ein schwaecherer

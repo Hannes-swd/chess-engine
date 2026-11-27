@@ -37,6 +37,8 @@ struct AssistSettings {
     bool sounds = true;           // Klang fuer Zug, Schlag, Schach, Zeitnot
     bool premoves = true;         // Zug vormerken, waehrend der Bot denkt
     int boardTheme = 0;           // Index in Theme::boardThemes()
+    int language = 0;             // 0 Deutsch, 1 Englisch
+    int pieceSet = 0;             // 0 Klassisch, 1 Diagramm, 2 Buchstaben
     std::vector<std::string> plugins;  // aktive Plugins (Ordnernamen)
 
     static AssistSettings learning();  // alles an

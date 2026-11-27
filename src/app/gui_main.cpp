@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
     bool demoAnalyse = false, light = false, dark = false;
     int tab = -1, view = -1, botProfile = -1;
     std::string marks, select, openFile, pluginList;
-    int drill = -2, boardTheme = -1;
+    int drill = -2, boardTheme = -1, pieceSet = -1, lang = -1;
     bool hint = false, editor = false, compact = false;
     int timePreset = -1, assists = -1, previewSteps = -1;
     for (int i = 1; i < argc; ++i) {
@@ -50,6 +50,8 @@ int main(int argc, char** argv) {
         else if (a == "--plugins" && i + 1 < argc) pluginList = argv[++i];
         else if (a == "--drill" && i + 1 < argc) drill = std::atoi(argv[++i]);
         else if (a == "--board" && i + 1 < argc) boardTheme = std::atoi(argv[++i]);
+        else if (a == "--pieces" && i + 1 < argc) pieceSet = std::atoi(argv[++i]);
+        else if (a == "--lang" && i + 1 < argc) lang = std::string(argv[++i]) == "en" ? 1 : 0;
     }
 
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
@@ -96,6 +98,7 @@ int main(int argc, char** argv) {
 
     {
         chess::ui::GuiApp app(theme, screenshot != nullptr);
+        app.setRenderer(renderer);
         if (screenshot) app.setSandbox(true);  // Testlaeufe duerfen nichts speichern (Elo, Partien, Einstellungen)
         if (light) app.overrideTheme(false);
         if (dark) app.overrideTheme(true);
@@ -107,6 +110,8 @@ int main(int argc, char** argv) {
         if (!demoMoves.empty() || demoAnalyse) app.demo(demoMoves, demoAnalyse);
         if (!marks.empty() || !select.empty() || hint) app.demoMarks(marks, select, hint);
         if (boardTheme >= 0) app.requestBoardTheme(boardTheme);
+        if (pieceSet >= 0) app.requestPieceSet(pieceSet);
+        if (lang >= 0) app.requestLanguage(lang);
         if (!pluginList.empty()) {
             std::vector<std::string> ids;
             size_t start = 0;

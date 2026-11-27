@@ -1,6 +1,8 @@
 {
   "name": "Meister",
   "description": "Volle Stockfish-Stärke, rechnet tief. Für dich vermutlich unschlagbar – zum Staunen und Lernen.",
+  "name_en": "Master",
+  "description_en": "Full Stockfish strength, calculates deeply. Probably unbeatable for you – to marvel at and learn from.",
   "engine": "auto",
   "skill": 20,
   "depth": 18,

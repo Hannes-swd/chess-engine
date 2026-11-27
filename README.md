@@ -8,6 +8,10 @@ schiefging und was besser gewesen wäre.
 
 ## Was es kann
 
+- **Startseite** – schnell eine Partie beginnen (1 min, 10 min, 3+2), die nächste Aufgabe, eine Eröffnung
+  des Tages, die letzte Partie, die Aufgabe des Tages, ein passender Gegner und die letzten Partien auf
+  einen Blick, dazu deine Serie gespielter Tage.
+
 - **Gegen Bots spielen** – acht Bots vom Einsteiger bis zur vollen Stockfish-Stärke, mit Spielstil
   (aggressiv/vorsichtig), Zufall, Patzern und menschlicher Bedenkzeit. Alles einstellbar und als Profil
   speicherbar. Eigene Bots lassen sich direkt in der App anlegen.
@@ -18,17 +22,20 @@ schiefging und was besser gewesen wäre.
   Pfeile und Kreise. Jede Hilfe einzeln abschaltbar, bis hin zum Turniermodus ohne Hilfen.
 - **Training aus eigenen Fehlern** – jeder Fehler und Patzer aus der Analyse wird zur Aufgabe
   „Finde den besseren Zug“. Wiederholung nach dem Karteikasten-Prinzip: Gelöstes kommt nach Tagen
-  wieder, Falsches schon bald.
+  wieder, Falsches schon bald. Ältere Partien lassen sich nachträglich auswerten.
 - **Eröffnungen** – gut 100 bekannte Linien mit deutschen Namen, angezeigt in Zugliste und Partienliste,
   dazu ein Eröffnungs-Trainer, in dem der Gegner nach Theorie antwortet.
 - **Elo und Statistik** – lokale Wertung gegen die Bots mit Verlauf als Kurve, Bilanz mit Weiß/Schwarz
   und je Bot, Genauigkeit im Schnitt, häufigste Fehlerarten, eigene Eröffnungen.
 - **Spielgefühl** – gleitende Figuren, leise Klänge, Züge vormerken (Premove), Remis anbieten,
-  offene Partie beim nächsten Start fortsetzen, sechs Brett-Designs.
+  offene Partie beim nächsten Start fortsetzen, sechs Brett-Designs und drei Figurensätze (Klassisch,
+  Diagramm, Buchstaben).
+- **Deutsch oder Englisch** – die Oberfläche lässt sich in den Einstellungen auf Englisch umstellen
+  (Coach-Erklärungen, Eröffnungsnamen und Bot-Beschreibungen bleiben vorerst Deutsch).
 - **PGN-Export und -Import** – jede Partie als Text, mit Bewertungen als Kommentare; gespeicherte Partien (oder PGN aus der Zwischenablage) wieder öffnen und analysieren.
 - **Lua-Plugins** – Brettgröße, neue Figuren (auch mit eigener Zugfunktion), Startaufstellung,
   Zugregeln und Siegbedingungen per Plugin ändern. Abgeschottet: kein Zugriff auf Dateien, System
-  oder Netz. Neun Beispiele liegen bei, darunter Matt-in-1-Aufgaben und ein Start aus zufälligen Mittelspiel-Stellungen. Aktive Plugins werden per Ziehen sortiert – das obere gewinnt bei Konflikten, die Anleitung steht in [docs/PLUGINS.md](docs/PLUGINS.md).
+  oder Netz. Neun Beispiele liegen bei, darunter Matt-in-1-Aufgaben und ein Start aus zufälligen Mittelspiel-Stellungen. Aktive Plugins werden per Ziehen sortiert – das obere gewinnt bei Konflikten. Plugins können eigene Figurenbilder, Icons und Vorschaubilder mitbringen und Meldungen, Klänge und Markierungen auslösen; die Bots rechnen mit den Plugin-Regeln, die Anleitung steht in [docs/PLUGINS.md](docs/PLUGINS.md).
 
 | Partie gegen einen Bot | Variante durchspielen |
 |---|---|

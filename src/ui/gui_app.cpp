@@ -1,4 +1,5 @@
 #include "ui/gui_app.hpp"
+#include "ui/i18n.hpp"
 
 #include "app/environment.hpp"
 #include "core/fen.hpp"
@@ -15,6 +16,7 @@
 #include <fstream>
 #include <random>
 #include <sstream>
+#include <thread>
 
 namespace chess::ui {
 
@@ -48,6 +50,11 @@ int msSince(std::chrono::steady_clock::time_point t) {
 
 GuiApp::GuiApp(Theme& theme, bool sandbox) : theme_(theme), exeDir_(env::executableDir()) {
     sandbox_ = sandbox;
+    plugins::setUiThread(std::this_thread::get_id());
+    theme_.pieceImage = [this](const std::string& path) -> ImTextureID {
+        const Image* img = images_.get(path, 256);
+        return img ? img->id() : ImTextureID{};
+    };
     settings_.darkTheme = theme_.dark;
     settings_.load(env::settingsFile());
     applyTheme();
@@ -66,10 +73,10 @@ GuiApp::GuiApp(Theme& theme, bool sandbox) : theme_(theme), exeDir_(env::executa
     if (auto sf = env::findStockfish(exeDir_)) {
         std::string err;
         stockfish_ = UciEngine::launch(*sf, err);
-        if (!stockfish_) setStatus("Stockfish konnte nicht starten: " + err);
+        if (!stockfish_) setStatus(tr("Stockfish konnte nicht starten: ") + err);
     }
     engineInfo_ = stockfish_ ? stockfish_->name()
-                             : "Eingebaute Engine (Stockfish nicht gefunden – siehe README)";
+                             : tr("Eingebaute Engine (Stockfish nicht gefunden – siehe README)");
     analysisDepth_ = stockfish_ ? 14 : 8;
 
     // Vorauswahl: ein mittelstarker Gegner, die Partie startet aber zu zweit
@@ -81,14 +88,17 @@ GuiApp::GuiApp(Theme& theme, bool sandbox) : theme_(theme), exeDir_(env::executa
     startNewGame();
     selectedProfile_ = keep;
     loadResume();  // nach startNewGame, das eine alte Fortsetzung sonst verwerfen wuerde
+    mode_ = Mode::Home;
 }
 
 GuiApp::~GuiApp() {
+    theme_.pieceImage = nullptr;  // Theme lebt laenger als die Bilder
     saveResume();
     analysisStop_->store(true);
     if (botJob_.valid()) botJob_.wait();
     if (analysisJob_.valid()) analysisJob_.wait();
     if (hintJob_.valid()) hintJob_.wait();
+    if (harvestJob_.valid()) harvestJob_.wait();
 }
 
 // ===========================================================================
@@ -146,9 +156,15 @@ void GuiApp::startNewGame() {
         flipped_ = false;
         botElo_ = 0;
     }
+    // Aufgaben-Plugins (z. B. Matt in 1): du spielst immer die Seite, die am Zug ist
+    if (bot_ && pluginPlayerStarts_) {
+        botColor_ = opposite(game_.position().sideToMove());
+        flipped_ = botColor_ == Color::White;
+    }
     undoUsed_ = hintUsed_ = fenGame_ = false;
     lastRatedDelta_ = 0;
     if (stockfish_ && !engineBusy()) stockfish_->newGame();
+    applyPluginUi();  // Meldungen aus on_setup
 }
 
 // ===========================================================================
@@ -158,12 +174,12 @@ void GuiApp::startNewGame() {
 bool GuiApp::isRated() const { return unratedReason().empty(); }
 
 std::string GuiApp::unratedReason() const {
-    if (!bot_) return "Zu zweit am Brett wird nicht gewertet";
-    if (fenGame_) return "Eigene Startstellung";
-    if (pluginGame_) return "Mit Plugins gespielt";
-    if (undoUsed_) return "Zug zurückgenommen";
-    if (hintUsed_) return "Tipp benutzt";
-    if (!usesStandardRules(game_)) return "Variante mit eigenen Regeln";
+    if (!bot_) return tr("Zu zweit am Brett wird nicht gewertet");
+    if (fenGame_) return tr("Eigene Startstellung");
+    if (pluginGame_) return tr("Mit Plugins gespielt");
+    if (undoUsed_) return tr("Zug zurückgenommen");
+    if (hintUsed_) return tr("Tipp benutzt");
+    if (!usesStandardRules(game_)) return tr("Variante mit eigenen Regeln");
     return {};
 }
 
@@ -183,7 +199,7 @@ void GuiApp::rateFinishedGame() {
         std::ofstream file(env::profileFile(), std::ios::binary);
         file << playerProfileToJson(player_);
     }
-    setStatus("Elo " + std::to_string(player_.rating) + " (" + (lastRatedDelta_ >= 0 ? "+" : "") +
+    setStatus(tr("Elo ") + std::to_string(player_.rating) + " (" + (lastRatedDelta_ >= 0 ? "+" : "") +
               std::to_string(lastRatedDelta_) + ")");
 }
 
@@ -199,9 +215,9 @@ void GuiApp::loadFen(const std::string& fen) {
         gamePlugins_.clear();
         flipped_ = bot_ ? botColor_ == Color::White : false;
         fenGame_ = true;
-        setStatus("Stellung geladen");
+        setStatus(tr("Stellung geladen"));
     } catch (const std::exception& e) {
-        setStatus(std::string("FEN ungültig: ") + e.what());
+        setStatus(std::string(tr("FEN ungültig: ")) + e.what());
     }
 }
 
@@ -219,6 +235,7 @@ bool GuiApp::commitMove(const Move& m) {
     board_.cancel();
     board_.clearAnnotations();
     lastMoveTime_ = ImGui::GetTime();
+    applyPluginUi();
     return true;
 }
 
@@ -240,9 +257,9 @@ void GuiApp::tickClock() {
     pendingBot_.reset();
     const Color other = opposite(side);
     if (hasMatingMaterial(game_.position(), other))
-        game_.setResult({other == Color::White ? GameResult::WhiteWins : GameResult::BlackWins, "Zeit abgelaufen"});
+        game_.setResult({other == Color::White ? GameResult::WhiteWins : GameResult::BlackWins, tr("Zeit abgelaufen")});
     else
-        game_.setResult({GameResult::Draw, "Zeit abgelaufen, Gegner kann nicht mehr mattsetzen"});
+        game_.setResult({GameResult::Draw, tr("Zeit abgelaufen, Gegner kann nicht mehr mattsetzen")});
 }
 
 void GuiApp::resign() {
@@ -250,7 +267,7 @@ void GuiApp::resign() {
     const Color loser = bot_ ? opposite(botColor_) : game_.position().sideToMove();
     pendingBot_.reset();
     game_.setResult({loser == Color::White ? GameResult::BlackWins : GameResult::WhiteWins,
-                     std::string(loser == Color::White ? "Weiß" : "Schwarz") + " gibt auf"});
+                     std::string(loser == Color::White ? tr("Weiß") : tr("Schwarz")) + tr(" gibt auf")});
     view_ = -1;
 }
 
@@ -271,13 +288,13 @@ void GuiApp::reloadProfiles() {
         else
             profiles_.push_back(std::move(own));
     }
-    if (!errors.empty()) setStatus("Bot-Profil fehlerhaft: " + errors.front());
+    if (!errors.empty()) setStatus(tr("Bot-Profil fehlerhaft: ") + errors.front());
     if (selectedProfile_ >= static_cast<int>(profiles_.size())) selectedProfile_ = -1;
 }
 
 void GuiApp::undo() {
     if (botThinking()) {
-        setStatus("Der Bot denkt gerade – gleich nochmal versuchen");
+        setStatus(tr("Der Bot denkt gerade – gleich nochmal versuchen"));
         return;
     }
     if (!game_.undo()) return;
@@ -308,7 +325,7 @@ void GuiApp::demo(const std::string& moves, bool analyse) {
             if (!token.empty()) {
                 Position tmp = game_.position();
                 const auto m = parseMove(tmp, game_.legalMoves(), token);
-                if (!m || !commitMove(*m)) setStatus("Demo-Zug ungültig: " + token);
+                if (!m || !commitMove(*m)) setStatus(tr("Demo-Zug ungültig: ") + token);
             }
             token.clear();
         } else {
@@ -353,6 +370,7 @@ void GuiApp::setView(int ply) {
 
 void GuiApp::pollJobs() {
     using namespace std::chrono_literals;
+    finishHarvest();
     if (botJob_.valid() && botJob_.wait_for(0ms) == std::future_status::ready) {
         Bot::Choice c = botJob_.get();
         if (botJobGen_ == generation_ && botJobPly_ == game_.ply() && c.move.valid()) pendingBot_ = std::move(c);
@@ -367,7 +385,7 @@ void GuiApp::pollJobs() {
             if (commitMove(c.move)) {
                 lastBotSan_ = san;
                 lastBotScore_ = c.score;
-                lastBotInfo_ = san + ": " + c.reason;
+                lastBotInfo_ = san + ": " + tr(c.reason);
                 if (c.score.mate || c.score.value != 0) lastBotInfo_ += ", " + c.score.toString();
                 if (botDelayMs_ > 0) {
                     char buf[32];
@@ -387,7 +405,7 @@ void GuiApp::pollJobs() {
                     if (match && !game_.outcome().over())
                         playMove(*match);
                     else
-                        setStatus("Vorzug nicht mehr möglich");
+                        setStatus(tr("Vorzug nicht mehr möglich"));
                 }
             }
         }
@@ -399,11 +417,11 @@ void GuiApp::pollJobs() {
             hintGen_ = hintJobGen_;
             hintPly_ = hintJobPly_;
             Position tmp = game_.position();
-            std::string text = "Tipp: " + toSan(tmp, r.bestMove);
+            std::string text = tr("Tipp: ") + toSan(tmp, r.bestMove);
             if (!r.lines.empty()) text += "  (" + r.lines.front().score.toString() + ")";
             setStatus(text);
         } else if (!r.ok) {
-            setStatus("Tipp fehlgeschlagen: " + r.error);
+            setStatus(tr("Tipp fehlgeschlagen: ") + r.error);
         }
     }
     if (analysisJob_.valid() && analysisJob_.wait_for(0ms) == std::future_status::ready) {
@@ -414,7 +432,7 @@ void GuiApp::pollJobs() {
                 analysisPly_ = analysisJobPly_;
                 if (!savePath_.empty()) savePgn(true);  // gespeicherte Datei mit Bewertungen aktualisieren
                 collectPuzzles();
-                setStatus("Analyse fertig");
+                setStatus(tr("Analyse fertig"));
             } else {
                 setStatus(a.error);
             }
@@ -492,7 +510,11 @@ void GuiApp::startHint() {
     hintJobPly_ = game_.ply();
     hintUsed_ = true;
     if (!isLive()) setView(game_.ply());  // Tipp gilt fuer die aktuelle Stellung
-    hintJob_ = std::async(std::launch::async, [pos = game_.position(), engine, lim]() { return engine->search(pos, lim); });
+    hintJob_ = std::async(std::launch::async, [pos = game_.position(), g = game_, engine, lim]() {
+        SearchLimits l = lim;
+        l.game = &g;  // Plugin-Regeln beachten
+        return engine->search(pos, l);
+    });
 }
 
 std::optional<Move> GuiApp::currentHint() const {
@@ -506,18 +528,38 @@ std::optional<Move> GuiApp::currentHint() const {
 
 const Position& GuiApp::viewedPosition() const { return view_ < 0 ? game_.position() : game_.positionAt(view_); }
 
-std::string GuiApp::playerName(Color side) const {
+// Name fuer Dateien (PGN, Statistik): immer Deutsch, "Du" fuer dich – daran erkennen Statistik und Aufgaben deine Partien
+std::string GuiApp::pgnName(Color side) const {
     if (bot_) return side == botColor_ ? bot_->profile().name : "Du";
     for (const auto& [k, v] : loadedTags_)  // geoeffnete Partie: Namen aus der Datei
         if (k == (side == Color::White ? "White" : "Black") && !v.empty() && v != "?") return v;
     return side == Color::White ? "Weiß" : "Schwarz";
 }
 
+// Name fuer die Anzeige, in der gewaehlten Sprache
+std::string GuiApp::playerName(Color side) const { return displayPlayer(pgnName(side)); }
+
+std::string GuiApp::displaySource(const std::string& source) const {
+    const std::string sep = " – ";
+    const size_t a = source.find(sep);
+    const size_t b = source.rfind(", ");
+    if (a == std::string::npos || b == std::string::npos || b < a) return source;
+    return displayPlayer(source.substr(0, a)) + sep + displayPlayer(source.substr(a + sep.size(), b - a - sep.size())) +
+           source.substr(b);
+}
+
+std::string GuiApp::displayPlayer(const std::string& stored) const {
+    if (stored == "Du" || stored == "Weiß" || stored == "Schwarz") return tr(stored);
+    for (const BotProfile& p : profiles_)
+        if (p.name == stored) return p.displayName(english());
+    return stored;
+}
+
 std::string GuiApp::resultTitle(const GameOutcome& out) const {
-    if (out.result == GameResult::Draw) return "Remis";
+    if (out.result == GameResult::Draw) return tr("Remis");
     const Color winner = out.result == GameResult::WhiteWins ? Color::White : Color::Black;
-    if (bot_) return winner == botColor_ ? "Verloren" : "Gewonnen!";
-    return winner == Color::White ? "Weiß gewinnt" : "Schwarz gewinnt";
+    if (bot_) return winner == botColor_ ? tr("Verloren") : tr("Gewonnen!");
+    return winner == Color::White ? tr("Weiß gewinnt") : tr("Schwarz gewinnt");
 }
 
 std::string GuiApp::moveLabel(int ply) const {
@@ -548,8 +590,8 @@ std::string GuiApp::pgnText() const {
         std::string date = env::timestamp().substr(0, 10);
         std::replace(date.begin(), date.end(), '-', '.');
         tags.emplace_back("Date", date);
-        tags.emplace_back("White", playerName(Color::White));
-        tags.emplace_back("Black", playerName(Color::Black));
+        tags.emplace_back("White", pgnName(Color::White));
+        tags.emplace_back("Black", pgnName(Color::Black));
         if (clock_.control().enabled()) tags.emplace_back("TimeControl", clock_.control().pgnTag());
     }
     std::vector<std::string> comments;
@@ -569,11 +611,11 @@ void GuiApp::savePgn(bool automatic) {
     std::ofstream out(savePath_, std::ios::binary);
     out << pgnText();
     if (!out) {
-        setStatus("Speichern fehlgeschlagen: " + savePath_.string());
+        setStatus(tr("Speichern fehlgeschlagen: ") + savePath_.string());
         return;
     }
     savedGen_ = generation_;
-    if (!automatic) setStatus("Gespeichert: " + savePath_.filename().string());
+    if (!automatic) setStatus(tr("Gespeichert: ") + savePath_.filename().string());
 }
 
 void GuiApp::setStatus(std::string msg) {
@@ -632,7 +674,7 @@ void GuiApp::frame() {
     if (requestedPreview_ >= 0 && analysis_)
         if (const MoveReview* r = reviewFor(viewPly() - 1); r && !r->bestLine.empty()) {
             const int view = viewPly();
-            startPreview(game_.positionAt(view - 1), r->bestLine, "Besser war " + figurine(r->bestSan));
+            startPreview(game_.positionAt(view - 1), r->bestLine, tr("Besser war ") + figurine(r->bestSan));
             setPreviewIndex(requestedPreview_);
             view_ = view;  // startPreview veraendert die Ansicht nicht, nur zur Sicherheit
             requestedPreview_ = -1;
@@ -677,6 +719,16 @@ void GuiApp::frame() {
         ImGui::PopStyleColor();
     }
 
+    // Startseite: volle Breite, ohne Brett und rechtes Panel
+    if (mode_ == Mode::Home && !zen_) {
+        ImGui::SetCursorPos(ImVec2(navW, topH));
+        ImGui::BeginChild("##home", ImVec2(full.x - navW, full.y - topH), ImGuiChildFlags_None);
+        drawHome();
+        ImGui::EndChild();
+        ImGui::End();
+        return;
+    }
+
     // Mitte: Brett
     ImGui::SetCursorPos(ImVec2(navW, topH));
     ImGui::BeginChild("##boardarea", ImVec2(full.x - navW - panelW - margin, full.y - topH),
@@ -714,6 +766,10 @@ void GuiApp::drawBoardArea() {
 
     if (drillActive()) {
         drawDrillBoard();
+        return;
+    }
+    if (mode_ == Mode::Plugins && !zen_) {  // Plugin-Ansicht: Detailseite statt Brett
+        drawPluginDetail();
         return;
     }
     const GameOutcome out = game_.outcome();
@@ -768,7 +824,7 @@ void GuiApp::drawBoardArea() {
     if (auto mv = board_.draw(pos, legal, interactive || premoveMode, flipped_, ov, theme_, boardOrigin, boardAvail)) {
         if (premoveMode) {
             premove_ = *mv;
-            setStatus("Zug vorgemerkt – Rechtsklick hebt ihn auf");
+            setStatus(tr("Zug vorgemerkt – Rechtsklick hebt ihn auf"));
         } else {
             playMove(*mv);
         }
@@ -790,7 +846,7 @@ void GuiApp::drawBoardArea() {
 
     if (zen_) {
         ImGui::SetCursorScreenPos(ImVec2(origin.x + avail.x - ImGui::GetFrameHeight() * 1.3f, origin.y));
-        if (iconButton("##zenoff", icon::fullscreenExit, "Zen-Modus beenden (Z)")) zen_ = false;
+        if (iconButton("##zenoff", icon::fullscreenExit, tr("Zen-Modus beenden (Z)"))) zen_ = false;
     }
 }
 
@@ -895,7 +951,7 @@ void GuiApp::drawEvalBar(ImVec2 min, ImVec2 max) {
         dl->AddRectFilled(ImVec2(min.x, max.y - whiteH), max, Theme::u32(c.whiteFill), r);
     dl->AddRect(min, max, Theme::u32(c.border), r);
 
-    if (ImGui::IsMouseHoveringRect(min, max)) ImGui::SetTooltip("Bewertung: %s", score->toString().c_str());
+    if (ImGui::IsMouseHoveringRect(min, max)) ImGui::SetTooltip(tr("Bewertung: %s"), score->toString().c_str());
 }
 
 void GuiApp::drawResultCard() {
@@ -927,7 +983,7 @@ void GuiApp::drawResultCard() {
     dl->AddText(hf, 46 * s, ImVec2(min.x + pad, min.y + pad - 4 * s), Theme::u32(c.accent), score.c_str());
     const float tx = min.x + pad + ssz.x + 18 * s;
     dl->AddText(hf, 26 * s, ImVec2(tx, min.y + pad), Theme::u32(c.text), resultTitle(out).c_str());
-    dl->AddText(ImGui::GetFont(), 16 * s, ImVec2(tx, min.y + pad + 30 * s), Theme::u32(c.textMuted), out.reason.c_str());
+    dl->AddText(ImGui::GetFont(), 16 * s, ImVec2(tx, min.y + pad + 30 * s), Theme::u32(c.textMuted), tr(out.reason).c_str());
 
     // Elo-Aenderung oder warum nicht gewertet wurde
     const float rowY = min.y + pad + ssz.y + 10 * s;
@@ -942,19 +998,19 @@ void GuiApp::drawResultCard() {
         dl->AddText(hf, 20 * s, ImVec2(min.x + pad + 36 * s + ew, rowY + 1 * s), Theme::u32(col), delta.c_str());
     } else if (bot_) {
         dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(min.x + pad, rowY + 3 * s), Theme::u32(c.textMuted),
-                    ("Ungewertet: " + unratedReason()).c_str());
+                    (tr("Ungewertet: ") + unratedReason()).c_str());
     }
 
     // Aktionen
     ImGui::SetCursorScreenPos(ImVec2(min.x + pad, max.y - pad - 44 * s));
     ImGui::PushFont(theme_.strong, 0.0f);
-    if (primaryButton((std::string(icon::analysis) + "  Analysieren").c_str(), ImVec2(0, 44 * s))) {
+    if (primaryButton((std::string(icon::analysis) + tr("  Analysieren")).c_str(), ImVec2(0, 44 * s))) {
         startAnalysis();
         mode_ = Mode::Analysis;
         resultDismissed_ = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button((std::string(icon::refresh) + "  Neue Partie").c_str(), ImVec2(0, 44 * s))) startNewGame();
+    if (ImGui::Button((std::string(icon::refresh) + tr("  Neue Partie")).c_str(), ImVec2(0, 44 * s))) startNewGame();
     ImGui::PopFont();
 
     // Schliessen dezent oben rechts
@@ -962,7 +1018,7 @@ void GuiApp::drawResultCard() {
     ImGui::SetCursorScreenPos(ImVec2(max.x - btn - 8 * s, min.y + 8 * s));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Text, c.textMuted);
-    if (iconButton("##closecard", icon::close, "Schließen")) resultDismissed_ = true;
+    if (iconButton("##closecard", icon::close, tr("Schließen"))) resultDismissed_ = true;
     ImGui::PopStyleColor(2);
 }
 
@@ -1023,12 +1079,16 @@ bool GuiApp::card(const char* id, const std::string& title, const std::string& c
 
 void GuiApp::saveSettings() {
     if (sandbox_) return;
-    if (!settings_.save(env::settingsFile())) setStatus("Einstellungen konnten nicht gespeichert werden");
+    if (!settings_.save(env::settingsFile())) setStatus(tr("Einstellungen konnten nicht gespeichert werden"));
 }
 
 void GuiApp::applyTheme() {
     theme_.dark = settings_.darkTheme;
     theme_.setBoard(settings_.boardTheme);
+    theme_.pieceSet = std::clamp(settings_.pieceSet, 0, 2);
+    setLanguage(settings_.language == 1 ? Language::English : Language::German);
+    plugins::setLanguage(settings_.language == 1);
+    pluginSummaries_.clear();  // "Was es aendert" in der neuen Sprache
     theme_.apply();
 }
 
@@ -1042,16 +1102,32 @@ void GuiApp::tabSettings() {
 
     ImGui::BeginChild("##settings", ImVec2(0, 0), ImGuiChildFlags_None);
     ImGui::Dummy(ImVec2(0, 2 * s));
-    sectionTitle("Schnellwahl");
+    sectionTitle(tr("Sprache"));
+    {
+        const float w2 = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
+        const char* langs[2] = {"Deutsch", "English"};
+        for (int i = 0; i < 2; ++i) {
+            if (i) ImGui::SameLine();
+            const bool active = settings_.language == i;
+            if (active) ImGui::PushStyleColor(ImGuiCol_Button, accentSoft);
+            if (ImGui::Button(langs[i], ImVec2(w2, 0)) && !active) {
+                settings_.language = i;
+                applyTheme();
+                changed = true;
+            }
+            if (active) ImGui::PopStyleColor();
+        }
+    }
+    sectionTitle(tr("Schnellwahl"));
     struct Preset {
         const char* label;
         AssistSettings value;
         const char* help;
     };
     const Preset presets[] = {
-        {"Lernen", AssistSettings::learning(), "Alle Hilfen an, auch hängende Figuren"},
-        {"Standard", AssistSettings::standard(), "Die üblichen Hilfen"},
-        {"Ohne Hilfen", AssistSettings::none(), "Wie im Turnier: keine Punkte, Tipps, Zurücknehmen oder Bewertungen"},
+        {tr("Lernen"), AssistSettings::learning(), tr("Alle Hilfen an, auch hängende Figuren")},
+        {tr("Standard"), AssistSettings::standard(), tr("Die üblichen Hilfen")},
+        {tr("Ohne Hilfen"), AssistSettings::none(), tr("Wie im Turnier: keine Punkte, Tipps, Zurücknehmen oder Bewertungen")},
     };
     const float w3 = (ImGui::GetContentRegionAvail().x - 2 * ImGui::GetStyle().ItemSpacing.x) / 3;
     for (int i = 0; i < 3; ++i) {
@@ -1070,6 +1146,8 @@ void GuiApp::tabSettings() {
             settings_.sounds = keep.sounds;
             settings_.premoves = keep.premoves;
             settings_.boardTheme = keep.boardTheme;
+            settings_.pieceSet = keep.pieceSet;
+            settings_.language = keep.language;
             settings_.plugins = keep.plugins;
             changed = true;
         }
@@ -1077,39 +1155,36 @@ void GuiApp::tabSettings() {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", presets[i].help);
     }
 
-    sectionTitle("Beim Ziehen");
-    option("Mögliche Züge anzeigen (Punkte)", &settings_.legalMoves,
-           "Nach dem Anklicken einer Figur erscheinen Punkte auf allen Feldern, wohin sie ziehen kann.");
+    sectionTitle(tr("Beim Ziehen"));
+    option(tr("Mögliche Züge anzeigen (Punkte)"), &settings_.legalMoves,
+           tr("Nach dem Anklicken einer Figur erscheinen Punkte auf allen Feldern, wohin sie ziehen kann."));
     ImGui::BeginDisabled(!settings_.legalMoves);
-    changed |= toggleRow("Gefährliche Zielfelder rot", &settings_.dangerTargets,
-                         "Punkte werden rot, wenn die Figur dort Material verliert: ungedeckt angegriffen oder von "
-                         "einer billigeren Figur schlagbar. Braucht „Mögliche Züge“.",
+    changed |= toggleRow(tr("Gefährliche Zielfelder rot"), &settings_.dangerTargets,
+                         tr("Punkte werden rot, wenn die Figur dort Material verliert: ungedeckt angegriffen oder von einer billigeren Figur schlagbar. Braucht „Mögliche Züge“."),
                          22 * theme_.scale);
     ImGui::EndDisabled();
-    option("Zielfeld unter der Maus umrahmen", &settings_.targetFrame, nullptr);
+    option(tr("Zielfeld unter der Maus umrahmen"), &settings_.targetFrame, nullptr);
 
-    sectionTitle("Während der Partie");
-    option("Gefährdete eigene Figuren markieren", &settings_.hangingPieces,
-           "Roter Rahmen um eigene Figuren, die gerade Material verlieren: ungedeckt angegriffen oder von "
-           "einer billigeren Figur bedroht (z. B. Dame von Springer).");
-    option("Schach am König hervorheben", &settings_.checkGlow, nullptr);
-    option("Letzten Zug hervorheben", &settings_.lastMove, nullptr);
-    option("Materialvorteil anzeigen (+2)", &settings_.material, nullptr);
-    option("Tipp-Funktion (H)", &settings_.hintButton, "Die Engine zeigt auf Wunsch einen guten Zug.");
-    option("Zurücknehmen erlauben", &settings_.undo, nullptr);
-    option("Bewertung des Bots anzeigen", &settings_.botInfo,
-           "Begründung und Stellungsbewertung nach jedem Bot-Zug – verrät, wer besser steht.");
-    option("Eigene Pfeile & Kreise (Rechtsklick)", &settings_.annotations, nullptr);
-    option("Züge vormerken, während der Bot denkt", &settings_.premoves,
-           "Eigene Figur ziehen, solange der Bot am Zug ist: Der Zug wird blau vorgemerkt und sofort ausgeführt, "
-           "wenn er danach noch erlaubt ist. Rechtsklick hebt ihn auf.");
+    sectionTitle(tr("Während der Partie"));
+    option(tr("Gefährdete eigene Figuren markieren"), &settings_.hangingPieces,
+           tr("Roter Rahmen um eigene Figuren, die gerade Material verlieren: ungedeckt angegriffen oder von einer billigeren Figur bedroht (z. B. Dame von Springer)."));
+    option(tr("Schach am König hervorheben"), &settings_.checkGlow, nullptr);
+    option(tr("Letzten Zug hervorheben"), &settings_.lastMove, nullptr);
+    option(tr("Materialvorteil anzeigen (+2)"), &settings_.material, nullptr);
+    option(tr("Tipp-Funktion (H)"), &settings_.hintButton, tr("Die Engine zeigt auf Wunsch einen guten Zug."));
+    option(tr("Zurücknehmen erlauben"), &settings_.undo, nullptr);
+    option(tr("Bewertung des Bots anzeigen"), &settings_.botInfo,
+           tr("Begründung und Stellungsbewertung nach jedem Bot-Zug – verrät, wer besser steht."));
+    option(tr("Eigene Pfeile & Kreise (Rechtsklick)"), &settings_.annotations, nullptr);
+    option(tr("Züge vormerken, während der Bot denkt"), &settings_.premoves,
+           tr("Eigene Figur ziehen, solange der Bot am Zug ist: Der Zug wird blau vorgemerkt und sofort ausgeführt, wenn er danach noch erlaubt ist. Rechtsklick hebt ihn auf."));
 
-    sectionTitle("Analyse");
-    option("Bewertungsbalken neben dem Brett", &settings_.evalBar, nullptr);
-    option("Besten Zug als Pfeil zeigen", &settings_.bestArrow, nullptr);
-    option("?!  ?  ??  in der Zugliste", &settings_.moveMarks, nullptr);
+    sectionTitle(tr("Analyse"));
+    option(tr("Bewertungsbalken neben dem Brett"), &settings_.evalBar, nullptr);
+    option(tr("Besten Zug als Pfeil zeigen"), &settings_.bestArrow, nullptr);
+    option(tr("?!  ?  ??  in der Zugliste"), &settings_.moveMarks, nullptr);
 
-    sectionTitle("Brett");
+    sectionTitle(tr("Brett"));
     {
         // Kleine Vorschau je Design: 2 x 2 Felder
         const auto& themes = Theme::boardThemes();
@@ -1142,45 +1217,82 @@ void GuiApp::tabSettings() {
                 dl->AddRect(p0, ImVec2(p0.x + tw, p0.y + th),
                             Theme::u32(sel ? theme_.p().accent : theme_.p().border), 8 * s, 0, sel ? 1.5f * s : 1.0f * s);
             dl->AddText(ImGui::GetFont(), 15 * s, ImVec2(b0.x + 2 * q + 8 * s, p0.y + th * 0.5f - 9 * s),
-                        Theme::u32(sel ? theme_.p().text : theme_.p().textMuted), themes[static_cast<size_t>(i)].name);
+                        Theme::u32(sel ? theme_.p().text : theme_.p().textMuted), tr(themes[static_cast<size_t>(i)].name));
         }
     }
 
-    sectionTitle("Darstellung und Klang");
-    option("Figuren gleiten lassen", &settings_.animations, "Kurze Bewegung statt Springen, auch beim Nachspielen.");
-    option("Klänge", &settings_.sounds, "Leise Klänge für Zug, Schlag, Schach, Zeitnot und Partieende.");
-    option("Partie nach dem Ende automatisch analysieren", &settings_.autoAnalyse, nullptr);
-    option("Koordinaten am Brettrand", &settings_.coordinates, nullptr);
-    if (toggleRow("Dunkles Design", &settings_.darkTheme)) {
+    sectionTitle(tr("Figuren"));
+    {
+        const char* names[3] = {tr("Klassisch"), tr("Diagramm"), tr("Buchstaben")};
+        const float gapX = 6 * s;
+        const float tw = (ImGui::GetContentRegionAvail().x - 2 * gapX) / 3;
+        const float th = 70 * s;
+        PieceType king, knight;
+        king.id = "king", king.symbol = 'K', king.royal = true;
+        knight.id = "knight", knight.symbol = 'N';
+        const int keepSet = theme_.pieceSet;
+        for (int i = 0; i < 3; ++i) {
+            if (i) ImGui::SameLine(0, gapX);
+            const ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImGui::PushID(100 + i);
+            if (ImGui::InvisibleButton("##pieces", ImVec2(tw, th))) {
+                settings_.pieceSet = i;
+                applyTheme();
+                changed = true;
+            }
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::PopID();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const bool sel = settings_.pieceSet == i;
+            dl->AddRectFilled(p0, ImVec2(p0.x + tw, p0.y + th), Theme::u32(theme_.p().boardLight, 0.9f), 8 * s);
+            if (sel || hovered)
+                dl->AddRect(p0, ImVec2(p0.x + tw, p0.y + th), Theme::u32(sel ? theme_.p().accent : theme_.p().border), 8 * s,
+                            0, sel ? 2.0f * s : 1.0f * s);
+            theme_.pieceSet = i;
+            const float cell = 34 * s;
+            BoardView::drawPiece(dl, theme_, king, Color::White, ImVec2(p0.x + tw * 0.5f - cell * 0.5f, p0.y + 26 * s), cell);
+            BoardView::drawPiece(dl, theme_, knight, Color::Black, ImVec2(p0.x + tw * 0.5f + cell * 0.5f, p0.y + 26 * s), cell);
+            theme_.pieceSet = keepSet;
+            const ImVec2 ns = ImGui::GetFont()->CalcTextSizeA(14 * s, FLT_MAX, 0.0f, names[i]);
+            dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(p0.x + (tw - ns.x) * 0.5f, p0.y + th - 20 * s),
+                        Theme::u32(sel ? theme_.p().bg : theme_.p().bg, sel ? 1.0f : 0.75f), names[i]);
+        }
+    }
+
+    sectionTitle(tr("Darstellung und Klang"));
+    option(tr("Figuren gleiten lassen"), &settings_.animations, tr("Kurze Bewegung statt Springen, auch beim Nachspielen."));
+    option(tr("Klänge"), &settings_.sounds, tr("Leise Klänge für Zug, Schlag, Schach, Zeitnot und Partieende."));
+    option(tr("Partie nach dem Ende automatisch analysieren"), &settings_.autoAnalyse, nullptr);
+    option(tr("Koordinaten am Brettrand"), &settings_.coordinates, nullptr);
+    if (toggleRow(tr("Dunkles Design"), &settings_.darkTheme)) {
         applyTheme();
         changed = true;
     }
 
-    sectionTitle("Engine");
+    sectionTitle(tr("Engine"));
     ImGui::PushTextWrapPos(0);
     ImGui::TextUnformatted(engineInfo_.c_str());
     if (!stockfish_) {
-        ImGui::TextDisabled("%s", "Stockfish ist kostenlos. Lade die Windows-Version herunter, entpacke sie und lege "
-                                  "stockfish.exe in den Ordner engines neben dem Programm.");
+        ImGui::TextDisabled("%s", tr("Stockfish ist kostenlos. Lade die Windows-Version herunter, entpacke sie und lege stockfish.exe in den Ordner engines neben dem Programm."));
         ImGui::PopTextWrapPos();
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        if (ImGui::Button((std::string(icon::openNew) + "  Download-Seite").c_str()))
+        if (ImGui::Button((std::string(icon::openNew) + tr("  Download-Seite")).c_str()))
             SDL_OpenURL("https://stockfishchess.org/download/");
         ImGui::SameLine();
-        if (ImGui::Button((std::string(icon::folder) + "  Ordner engines").c_str())) {
+        if (ImGui::Button((std::string(icon::folder) + tr("  Ordner engines")).c_str())) {
             std::error_code ec;
             fs::create_directories(exeDir_ / "engines", ec);
             SDL_OpenURL(("file:///" + (exeDir_ / "engines").generic_string()).c_str());
         }
         ImGui::SameLine();
-        if (ImGui::Button((std::string(icon::sync) + "  Erneut suchen").c_str())) retryStockfish();
+        if (ImGui::Button((std::string(icon::sync) + tr("  Erneut suchen")).c_str())) retryStockfish();
         ImGui::PopStyleColor();
     } else {
         ImGui::PopTextWrapPos();
     }
 
     ImGui::Dummy(ImVec2(0, 4 * s));
-    ImGui::TextDisabled("Wird automatisch gespeichert.");
+    ImGui::TextDisabled(tr("Wird automatisch gespeichert."));
     ImGui::EndChild();
 
     if (changed) {
@@ -1199,7 +1311,7 @@ void GuiApp::botEditor() {
     };
 
     ImGui::PushItemWidth(-FLT_MIN);
-    sectionTitle("Name und Beschreibung");
+    sectionTitle(tr("Name und Beschreibung"));
     {
         char name[64] = {};
         std::snprintf(name, sizeof(name), "%s", p.name.c_str());
@@ -1214,114 +1326,114 @@ void GuiApp::botEditor() {
             changed = true;
         }
     }
-    sectionTitle("Stärke");
+    sectionTitle(tr("Stärke"));
     // Empfohlen: das menschliche Modell mit einer Ziel-Elo. Die alte Stockfish-Begrenzung
     // ist selbst auf der niedrigsten Stufe noch sehr stark.
     bool human = p.strength > 0;
-    if (toggleRow("Wie ein Mensch dieser Stärke spielen", &human,
-                  "Der Bot schaut nur so weit voraus wie ein Spieler dieser Elo, wählt öfter einen schwächeren "
-                  "Zug und patzt gelegentlich.")) {
+    if (toggleRow(tr("Wie ein Mensch dieser Stärke spielen"), &human,
+                  tr("Der Bot schaut nur so weit voraus wie ein Spieler dieser Elo, wählt öfter einen schwächeren Zug und patzt gelegentlich."))) {
         p.strength = human ? 1200 : 0;
         changed = true;
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Der Bot schaut nur so weit voraus wie ein Spieler dieser Elo, wählt öfter einen "
-                          "schwächeren Zug und patzt gelegentlich.");
+        ImGui::SetTooltip(tr("Der Bot schaut nur so weit voraus wie ein Spieler dieser Elo, wählt öfter einen schwächeren Zug und patzt gelegentlich."));
     if (human) {
-        changed |= ImGui::SliderInt("##strength", &p.strength, 400, 3000, "Ziel-Elo %d");
+        changed |= ImGui::SliderInt("##strength", &p.strength, 400, 3000, tr("Ziel-Elo %d"));
         const StrengthModel m = strengthModel(p.strength);
-        ImGui::TextDisabled("Schaut %d Halbzüge voraus, Aussetzer bei etwa %d %% der Züge", m.depth,
+        ImGui::TextDisabled(tr("Schaut %d Halbzüge voraus, Aussetzer bei etwa %d %% der Züge"), m.depth,
                             static_cast<int>(std::lround(m.blunder * 100)));
     } else {
         bool useElo = p.elo > 0;
-        if (toggleRow("Stockfish auf Elo begrenzen", &useElo)) {
+        if (toggleRow(tr("Stockfish auf Elo begrenzen"), &useElo)) {
             p.elo = useElo ? 1500 : 0;
             changed = true;
         }
         if (useElo)
-            changed |= ImGui::SliderInt("##elo", &p.elo, 1320, 3190, "Elo %d");
+            changed |= ImGui::SliderInt("##elo", &p.elo, 1320, 3190, tr("Elo %d"));
         else
-            changed |= ImGui::SliderInt("##skill", &p.skill, 0, 20, "Stufe %d / 20");
-        if (!stockfish_) ImGui::TextDisabled("Stufe und Elo-Begrenzung wirken nur mit Stockfish.");
+            changed |= ImGui::SliderInt("##skill", &p.skill, 0, 20, tr("Stufe %d / 20"));
+        if (!stockfish_) ImGui::TextDisabled(tr("Stufe und Elo-Begrenzung wirken nur mit Stockfish."));
     }
 
-    sectionTitle("Spielstil");
+    sectionTitle(tr("Spielstil"));
     float aggr = static_cast<float>(p.aggression);
-    if (ImGui::SliderFloat("##aggr", &aggr, -1.0f, 1.0f, aggr < -0.05f ? "vorsichtig  %.2f"
-                                                          : aggr > 0.05f  ? "aggressiv  %.2f"
-                                                                          : "ausgeglichen  %.2f")) {
+    if (ImGui::SliderFloat("##aggr", &aggr, -1.0f, 1.0f, aggr < -0.05f ? tr("vorsichtig  %.2f")
+                                                          : aggr > 0.05f  ? tr("aggressiv  %.2f")
+                                                                          : tr("ausgeglichen  %.2f"))) {
         p.aggression = aggr;
         changed = true;
     }
-    tip("Aggressiv bevorzugt Schläge, Schachs und Vorstöße; vorsichtig meidet sie.");
+    tip(tr("Aggressiv bevorzugt Schläge, Schachs und Vorstöße; vorsichtig meidet sie."));
 
-    sectionTitle("Zufall & Fehler");
+    sectionTitle(tr("Zufall & Fehler"));
     float rnd = static_cast<float>(p.randomness);
-    if (ImGui::SliderFloat("##rnd", &rnd, 0.0f, 200.0f, "Zufall  %.0f cp")) {
+    if (ImGui::SliderFloat("##rnd", &rnd, 0.0f, 200.0f, tr("Zufall  %.0f cp"))) {
         p.randomness = rnd;
         changed = true;
     }
-    tip("Rauschen auf die Bewertung: höher = unberechenbarer.");
+    tip(tr("Rauschen auf die Bewertung: höher = unberechenbarer."));
     float blunder = static_cast<float>(p.blunderChance * 100.0);
-    if (ImGui::SliderFloat("##blunder", &blunder, 0.0f, 50.0f, "Patzer-Wahrscheinlichkeit  %.0f %%")) {
+    if (ImGui::SliderFloat("##blunder", &blunder, 0.0f, 50.0f, tr("Patzer-Wahrscheinlichkeit  %.0f %%"))) {
         p.blunderChance = blunder / 100.0;
         changed = true;
     }
-    tip("So oft spielt der Bot absichtlich einen zufälligen Zug.");
-    changed |= ImGui::SliderInt("##cand", &p.candidates, 1, 10, "%d Kandidatenzüge");
-    tip("Aus so vielen guten Zügen wählt der Bot nach Stil und Zufall.");
-    changed |= ImGui::SliderInt("##window", &p.window, 0, 400, "Toleranz  %d cp");
-    tip("So viel schlechter als der beste Zug darf ein Kandidat höchstens sein.");
+    tip(tr("So oft spielt der Bot absichtlich einen zufälligen Zug."));
+    changed |= ImGui::SliderInt("##cand", &p.candidates, 1, 10, tr("%d Kandidatenzüge"));
+    tip(tr("Aus so vielen guten Zügen wählt der Bot nach Stil und Zufall."));
+    changed |= ImGui::SliderInt("##window", &p.window, 0, 400, tr("Toleranz  %d cp"));
+    tip(tr("So viel schlechter als der beste Zug darf ein Kandidat höchstens sein."));
 
-    sectionTitle("Tempo");
+    sectionTitle(tr("Tempo"));
     int mode = static_cast<int>(p.tempo.mode);
-    if (ImGui::Combo("##tempo", &mode, "Sofort\0Fest\0Wie ein Mensch\0")) {
+    // Eintraege durch \0 getrennt; als String gebaut, damit sie uebersetzt werden koennen
+    const std::string tempoItems = std::string(tr("Sofort")) + '\0' + tr("Fest") + '\0' + tr("Wie ein Mensch") + '\0';
+    if (ImGui::Combo("##tempo", &mode, tempoItems.c_str())) {
         p.tempo.mode = static_cast<TempoMode>(mode);
         changed = true;
     }
-    tip("Wie ein Mensch: zufällige Bedenkzeit, schneller bei klaren Zügen, länger in komplizierten Stellungen.");
+    tip(tr("Wie ein Mensch: zufällige Bedenkzeit, schneller bei klaren Zügen, länger in komplizierten Stellungen."));
     if (p.tempo.mode != TempoMode::Instant) {
         float lo = p.tempo.minMs / 1000.0f, hi = p.tempo.maxMs / 1000.0f;
         if (p.tempo.mode == TempoMode::Fixed) {
-            if (ImGui::SliderFloat("##fixed", &lo, 0.1f, 30.0f, "%.1f s pro Zug")) {
+            if (ImGui::SliderFloat("##fixed", &lo, 0.1f, 30.0f, tr("%.1f s pro Zug"))) {
                 p.tempo.minMs = static_cast<int>(lo * 1000);
                 p.tempo.maxMs = std::max(p.tempo.maxMs, p.tempo.minMs);
                 changed = true;
             }
         } else {
-            if (ImGui::DragFloatRange2("##range", &lo, &hi, 0.05f, 0.1f, 60.0f, "min %.1f s", "max %.1f s")) {
+            if (ImGui::DragFloatRange2("##range", &lo, &hi, 0.05f, 0.1f, 60.0f, tr("min %.1f s"), tr("max %.1f s"))) {
                 p.tempo.minMs = static_cast<int>(lo * 1000);
                 p.tempo.maxMs = std::max(p.tempo.minMs, static_cast<int>(hi * 1000));
                 changed = true;
             }
             float var = static_cast<float>(p.tempo.variance);
-            if (ImGui::SliderFloat("##var", &var, 0.0f, 1.5f, "Schwankung  %.2f")) {
+            if (ImGui::SliderFloat("##var", &var, 0.0f, 1.5f, tr("Schwankung  %.2f"))) {
                 p.tempo.variance = var;
                 changed = true;
             }
-            tip("Wie unterschiedlich lange der Bot nachdenkt.");
+            tip(tr("Wie unterschiedlich lange der Bot nachdenkt."));
         }
     }
     float pressure = static_cast<float>(p.pressureBlunder * 100.0);
-    if (ImGui::SliderFloat("##pressure", &pressure, 0.0f, 100.0f, "Nervosität in Zeitnot  %.0f %%")) {
+    if (ImGui::SliderFloat("##pressure", &pressure, 0.0f, 100.0f, tr("Nervosität in Zeitnot  %.0f %%"))) {
         p.pressureBlunder = pressure / 100.0;
         changed = true;
     }
-    tip("Unter 10 Sekunden auf der Uhr steigt die Fehlerwahrscheinlichkeit um bis zu diesen Wert.");
+    tip(tr("Unter 10 Sekunden auf der Uhr steigt die Fehlerwahrscheinlichkeit um bis zu diesen Wert."));
     ImGui::PopItemWidth();
 
     ImGui::Dummy(ImVec2(0, 2 * s));
     const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
-    if (ImGui::Button("Speichern", ImVec2(half, 0))) {
+    if (ImGui::Button(tr("Speichern"), ImVec2(half, 0))) {
         const fs::path file = sandbox_ ? fs::path() : env::userBotsDir() / ((p.id.empty() ? std::string("eigener_bot") : p.id) + ".json");
         std::ofstream out;
         if (!sandbox_) out.open(file, std::ios::binary);
         out << botProfileToJson(p);
-        setStatus(out ? "Bot gespeichert: " + file.filename().string() : "Speichern fehlgeschlagen");
+        setStatus(out ? tr("Bot gespeichert: ") + file.filename().string() : tr("Speichern fehlgeschlagen"));
     }
-    tip("Speichert nach Dokumente\\ChessEngine\\Bots – überschreibt die Vorlage beim nächsten Start.");
+    tip(tr("Speichert nach Dokumente\\ChessEngine\\Bots – überschreibt die Vorlage beim nächsten Start."));
     ImGui::SameLine();
-    if (ImGui::Button("Zurücksetzen", ImVec2(half, 0))) {
+    if (ImGui::Button(tr("Zurücksetzen"), ImVec2(half, 0))) {
         reloadProfiles();
         changed = true;
     }

@@ -115,8 +115,11 @@ if(CHESS_BUILD_GUI)
         src/ui/stats_panel.cpp
         src/ui/plugins_panel.cpp
         src/ui/feel.cpp
+        src/ui/image_cache.cpp
+        src/ui/i18n.cpp
+        src/ui/home_panel.cpp
     )
-    target_link_libraries(chessengine_gui PRIVATE chess_plugins imgui SDL2::SDL2main SDL2::SDL2-static)
+    target_link_libraries(chessengine_gui PRIVATE chess_plugins imgui SDL2::SDL2main SDL2::SDL2-static windowscodecs ole32)
     chess_warnings(chessengine_gui)
     add_custom_command(TARGET chessengine_gui POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:chessengine_gui>/bots
@@ -132,6 +135,7 @@ if(CHESS_BUILD_GUI)
         src/ui/theme.cpp
         src/ui/board_view.cpp
         src/ui/settings.cpp
+        src/ui/i18n.cpp
     )
     target_link_libraries(chess_ui_tests PRIVATE chess_engine imgui)
     chess_warnings(chess_ui_tests)

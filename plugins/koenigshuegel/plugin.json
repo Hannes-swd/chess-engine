@@ -1,6 +1,9 @@
 {
   "name": "Königshügel",
   "description": "Zusätzliche Siegbedingung: Wer seinen König auf eines der vier Mittelfelder (d4, e4, d5, e5) bringt, gewinnt sofort.",
+  "name_en": "King of the Hill",
+  "description_en": "Extra win condition: whoever brings their king to one of the four centre squares (d4, e4, d5, e5) wins at once.",
+  "color": "#A88A4C",
   "author": "ChessEngine",
   "version": "1.0"
 }

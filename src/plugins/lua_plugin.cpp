@@ -2,11 +2,14 @@
 
 #include "core/fen.hpp"
 #include "core/notation.hpp"
+#include "core/openings.hpp"
 #include "util/json.hpp"
 
 #include <lua.hpp>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -17,6 +20,8 @@ namespace chess::plugins {
 namespace {
 
 const char* const kBoardMeta = "chess.board";
+std::thread::id g_uiThread;
+bool g_english = false;
 
 std::string readText(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -255,8 +260,71 @@ std::optional<Move> readMove(lua_State* L, int idx, const Position& pos, const s
 
 }  // namespace
 
+void setUiThread(std::thread::id id) { g_uiThread = id; }
+void setLanguage(bool english) { g_english = english; }
+bool englishLanguage() { return g_english; }
+
+namespace {
+// opening_name("Italienische Partie") -> Name in der Sprache des Spielers
+int luaOpeningName(lua_State* L) {
+    lua_pushstring(L, localizedOpeningName(luaL_checkstring(L, 1), g_english).c_str());
+    return 1;
+}
+}  // namespace
+
 // Zugriff der C-Funktionen auf private Mitglieder
 struct LuaAccess {
+    // --- ui.* (nur bei echten Zuegen wirksam) ----------------------------------------
+    static int colorArg(lua_State* L, int idx) {
+        if (!lua_isstring(L, idx)) return 0;
+        const std::string c = lua_tostring(L, idx);
+        return c == "red" ? 1 : c == "blue" ? 2 : c == "yellow" ? 3 : 0;
+    }
+    static void push(lua_State* L, UiEvent e) {
+        LuaPlugin* p = self(L);
+        if (p->uiAllowed_ && p->uiEvents_.size() < 64) p->uiEvents_.push_back(std::move(e));
+    }
+    static int uiMessage(lua_State* L) {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Message;
+        e.text = luaL_checkstring(L, 1);
+        push(L, std::move(e));
+        return 0;
+    }
+    static int uiSound(lua_State* L) {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Sound;
+        e.text = luaL_checkstring(L, 1);
+        push(L, std::move(e));
+        return 0;
+    }
+    static int uiMark(lua_State* L) {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Mark;
+        e.x1 = static_cast<int>(luaL_checkinteger(L, 1));
+        e.y1 = static_cast<int>(luaL_checkinteger(L, 2));
+        e.color = colorArg(L, 3);
+        push(L, std::move(e));
+        return 0;
+    }
+    static int uiArrow(lua_State* L) {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Arrow;
+        e.x1 = static_cast<int>(luaL_checkinteger(L, 1));
+        e.y1 = static_cast<int>(luaL_checkinteger(L, 2));
+        e.x2 = static_cast<int>(luaL_checkinteger(L, 3));
+        e.y2 = static_cast<int>(luaL_checkinteger(L, 4));
+        e.color = colorArg(L, 5);
+        push(L, std::move(e));
+        return 0;
+    }
+    static void registerUi(lua_State* L) {
+        static const luaL_Reg fns[] = {
+            {"message", uiMessage}, {"sound", uiSound}, {"mark", uiMark}, {"arrow", uiArrow}, {nullptr, nullptr}};
+        luaL_newlib(L, fns);
+        lua_setglobal(L, "ui");
+    }
+
     static LuaPlugin* self(lua_State* L) { return *static_cast<LuaPlugin**>(lua_getextraspace(L)); }
 
     static void* alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
@@ -349,6 +417,19 @@ struct LuaAccess {
         lua_getfield(L, idx, "value");
         if (lua_isnumber(L, -1)) t.value = static_cast<int>(lua_tointeger(L, -1));
         lua_pop(L, 1);
+        // Bilder: image (beide Farben), image_white, image_black – nur Dateien im Plugin-Ordner
+        auto imagePath = [&](const char* key) -> std::string {
+            std::string rel;
+            str(key, rel);
+            if (rel.empty()) return {};
+            const std::filesystem::path r = std::filesystem::path(rel).lexically_normal();
+            if (r.is_absolute() || r.has_root_name() || (!r.empty() && *r.begin() == ".."))
+                luaL_error(L, "%s: nur Dateien im Plugin-Ordner erlaubt", key);
+            return (p->baseDir_ / r).string();
+        };
+        if (std::string both = imagePath("image"); !both.empty()) t.imageWhite = t.imageBlack = both;
+        if (std::string w = imagePath("image_white"); !w.empty()) t.imageWhite = w;
+        if (std::string b = imagePath("image_black"); !b.empty()) t.imageBlack = b;
         flag("royal", t.royal);
         flag("pawn_like", t.pawnLike);
         flag("promotion", t.promotionTarget);
@@ -492,8 +573,23 @@ std::shared_ptr<LuaPlugin> LuaPlugin::fromSource(const std::string& source, cons
     lua_pushnil(L);
     lua_setfield(L, -2, "dump");
     lua_pop(L, 1);
+    // Zufall pro Plugin-Instanz neu seeden: Lua seedet sonst nur sekundengenau (gleiche Zahlen bei schnellem Neustart)
+    {
+        static std::atomic<long long> counter{0};
+        lua_getglobal(L, "math");
+        lua_getfield(L, -1, "randomseed");
+        lua_pushinteger(L, static_cast<lua_Integer>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        lua_pushinteger(L, static_cast<lua_Integer>(++counter));
+        lua_call(L, 2, 0);
+        lua_pop(L, 1);
+    }
     lua_pushcfunction(L, &LuaAccess::print);
     lua_setglobal(L, "print");
+    LuaAccess::registerUi(L);
+    lua_pushstring(L, g_english ? "en" : "de");
+    lua_setglobal(L, "lang");
+    lua_pushcfunction(L, &luaOpeningName);
+    lua_setglobal(L, "opening_name");
     registerBoardMeta(L);
     lua_sethook(L, &LuaAccess::countHook, LUA_MASKCOUNT, 1000);
 
@@ -512,6 +608,13 @@ std::shared_ptr<LuaPlugin> LuaPlugin::fromSource(const std::string& source, cons
     }
     p->table_ = luaL_ref(L, LUA_REGISTRYINDEX);
     return p;
+}
+
+std::vector<UiEvent> LuaPlugin::takeUiEvents() {
+    std::lock_guard lock(mutex_);
+    std::vector<UiEvent> out;
+    out.swap(uiEvents_);
+    return out;
 }
 
 std::vector<std::string> LuaPlugin::log() const {
@@ -566,7 +669,9 @@ bool LuaPlugin::install(Variant& variant, PieceRegistry& registry, int priority,
             std::lock_guard l(strong->mutex_);
             if (!strong->pushFunction("on_setup")) return;
             BoardRef* b = pushBoard(strong->L_, &pos, pos);
+            strong->uiAllowed_ = std::this_thread::get_id() == g_uiThread;
             strong->pcall(1, 0, "on_setup");
+            strong->uiAllowed_ = false;
             b->pos = nullptr, b->cpos = nullptr;
         });
     if (hasFunction("filter_moves"))
@@ -579,7 +684,9 @@ bool LuaPlugin::install(Variant& variant, PieceRegistry& registry, int priority,
             if (!strong->pushFunction("on_move")) return;
             BoardRef* b = pushBoard(strong->L_, &pos, pos);
             pushMove(strong->L_, pos, m);
+            strong->uiAllowed_ = std::this_thread::get_id() == g_uiThread;
             strong->pcall(2, 0, "on_move");
+            strong->uiAllowed_ = false;
             b->pos = nullptr, b->cpos = nullptr;
         });
     if (hasFunction("check_end"))
@@ -695,13 +802,27 @@ std::vector<PluginInfo> discover(const std::vector<std::filesystem::path>& roots
                 if (auto v = json::parse(readText(manifest), &err); v && v->isObject()) {
                     info.name = v->getString("name", info.id);
                     info.description = v->getString("description", "");
+                    info.nameEn = v->getString("name_en", "");
+                    info.descriptionEn = v->getString("description_en", "");
                     info.author = v->getString("author", "");
                     info.version = v->getString("version", "");
                     info.priority = static_cast<int>(v->getNumber("priority", 0));
+                    info.playerStarts = v->getBool("player_moves_first", false);
+                    if (const std::string icon = v->getString("icon", ""); !icon.empty()) info.icon = e.path() / icon;
+                    if (const std::string pre = v->getString("preview", ""); !pre.empty()) info.preview = e.path() / pre;
+                    if (std::string col = v->getString("color", ""); !col.empty()) {
+                        if (col[0] == '#') col.erase(0, 1);
+                        info.color = static_cast<unsigned>(std::strtoul(col.c_str(), nullptr, 16)) & 0xFFFFFFu;
+                    }
                 } else {
                     info.error = "plugin.json: " + err;
                 }
             }
+            // Ohne Angabe: icon.png / vorschau.png im Plugin-Ordner, falls vorhanden
+            for (const char* name : {"icon.png", "icon.jpg"})
+                if (info.icon.empty() && std::filesystem::exists(e.path() / name)) info.icon = e.path() / name;
+            for (const char* name : {"vorschau.png", "vorschau.jpg", "preview.png", "preview.jpg"})
+                if (info.preview.empty() && std::filesystem::exists(e.path() / name)) info.preview = e.path() / name;
             found[info.id] = std::move(info);
         }
     }
@@ -727,11 +848,12 @@ VariantBuild buildVariant(const std::vector<PluginInfo>& active) {
     for (const PluginInfo& info : order) {
         std::string err;
         auto plugin = LuaPlugin::fromSource(readText(info.dir / "main.lua"), info.name, &err);
+        if (plugin) plugin->setBaseDir(info.dir);
         if (!plugin || !plugin->install(b.variant, *registry, info.priority, &err)) {
             b.errors.push_back(info.name + ": " + err);
             continue;
         }
-        names.push_back(info.name);
+        names.push_back(info.displayName(g_english));
         b.loaded.push_back(std::move(plugin));
     }
     b.variant.pieces = registry;

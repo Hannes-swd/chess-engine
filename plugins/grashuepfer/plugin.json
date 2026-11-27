@@ -1,6 +1,9 @@
 {
   "name": "Grashüpfer",
   "description": "Zwei Grashüpfer pro Seite. Sie springen in Damenrichtung über genau eine Figur und landen direkt dahinter. Zeigt Figuren mit eigener Zugfunktion in Lua.",
+  "name_en": "Grasshopper",
+  "description_en": "Two grasshoppers per side. They move along queen lines, jump over exactly one piece and land right behind it. Shows pieces with their own move function in Lua.",
+  "color": "#6F7A45",
   "author": "ChessEngine",
   "version": "1.0",
   "priority": 10

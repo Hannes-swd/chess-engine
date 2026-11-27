@@ -107,6 +107,8 @@ inline constexpr Icon cancel{0xe5c9};
 inline constexpr Icon deleteOutline{0xe92e};
 inline constexpr Icon playCircle{0xe1c4};
 inline constexpr Icon download{0xf090};
+inline constexpr Icon home{0xe88a};
+inline constexpr Icon people{0xe7ef};  // group
 }  // namespace icon
 
 }  // namespace chess::ui

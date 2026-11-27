@@ -136,22 +136,55 @@ bool detectSacrifice(const Position& before, const Move& played, const std::vect
     return worstBalanceAlong(after, threatLine, me, 3) <= start - minLoss;
 }
 
-void explain(MoveReview& r, const Position& before, const Position& after, const MoveReview* prev) {
-    const std::string me = colorName(r.mover);
-    const std::string opp = colorName(opposite(r.mover));
+// Englische Figurennamen (Objekt bzw. Satzanfang)
+std::string pieceObjectEn(const PieceType& t) {
+    if (t.id == "pawn") return "a pawn";
+    if (t.id == "knight") return "a knight";
+    if (t.id == "bishop") return "a bishop";
+    if (t.id == "rook") return "a rook";
+    if (t.id == "queen") return "the queen";
+    if (t.id == "king") return "the king";
+    return "the piece \"" + t.name + "\"";
+}
+
+std::string pieceSubjectEn(const PieceType& t) {
+    if (t.id == "pawn") return "The pawn";
+    if (t.id == "knight") return "The knight";
+    if (t.id == "bishop") return "The bishop";
+    if (t.id == "rook") return "The rook";
+    if (t.id == "queen") return "The queen";
+    if (t.id == "king") return "The king";
+    return "The piece \"" + t.name + "\"";
+}
+
+std::string pawnsEn(int cp) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.1f", std::abs(cp) / 100.0);
+    return buf;
+}
+
+// Ueberschrift und Erklaerung in einer Sprache (en = Englisch)
+void explainIn(MoveReview& r, const Position& before, const Position& after, const MoveReview* prev, bool en,
+               std::string& headline, std::string& explanation) {
+    auto L = [en](const char* de, const char* eng) { return std::string(en ? eng : de); };
+    const std::string me = en ? (r.mover == Color::White ? "White" : "Black") : colorName(r.mover);
+    const std::string opp = en ? (r.mover == Color::White ? "Black" : "White") : colorName(opposite(r.mover));
     const PieceRegistry& reg = before.registry();
+    auto object = [&](const PieceType& t) { return en ? pieceObjectEn(t) : pieceAccusative(t); };
+    auto subject = [&](const PieceType& t) { return en ? pieceSubjectEn(t) : pieceNominative(t); };
+    auto amount = [&](int cp) { return en ? pawnsEn(cp) : pawns(cp); };
 
     switch (r.quality) {
-        case MoveQuality::Brilliant: r.headline = r.san + " ist brillant"; break;
-        case MoveQuality::Great: r.headline = r.san + " ist ein sehr guter Zug"; break;
-        case MoveQuality::Best: r.headline = r.san + " ist der beste Zug"; break;
-        case MoveQuality::Excellent: r.headline = r.san + " ist exzellent"; break;
-        case MoveQuality::Good: r.headline = r.san + " ist gut"; break;
-        case MoveQuality::Inaccuracy: r.headline = r.san + " ist ungenau"; break;
-        case MoveQuality::Mistake: r.headline = r.san + " ist ein Fehler"; break;
-        case MoveQuality::Miss: r.headline = r.san + " verpasst eine Chance"; break;
-        case MoveQuality::Blunder: r.headline = r.san + " ist ein Patzer"; break;
-        case MoveQuality::Forced: r.headline = r.san + " war der einzige Zug"; break;
+        case MoveQuality::Brilliant: headline = r.san + L(" ist brillant", " is brilliant"); break;
+        case MoveQuality::Great: headline = r.san + L(" ist ein sehr guter Zug", " is a great move"); break;
+        case MoveQuality::Best: headline = r.san + L(" ist der beste Zug", " is the best move"); break;
+        case MoveQuality::Excellent: headline = r.san + L(" ist exzellent", " is excellent"); break;
+        case MoveQuality::Good: headline = r.san + L(" ist gut", " is good"); break;
+        case MoveQuality::Inaccuracy: headline = r.san + L(" ist ungenau", " is an inaccuracy"); break;
+        case MoveQuality::Mistake: headline = r.san + L(" ist ein Fehler", " is a mistake"); break;
+        case MoveQuality::Miss: headline = r.san + L(" verpasst eine Chance", " misses a chance"); break;
+        case MoveQuality::Blunder: headline = r.san + L(" ist ein Patzer", " is a blunder"); break;
+        case MoveQuality::Forced: headline = r.san + L(" war der einzige Zug", " was the only move"); break;
     }
 
     std::string text;
@@ -161,91 +194,116 @@ void explain(MoveReview& r, const Position& before, const Position& after, const
     switch (r.quality) {
         case MoveQuality::Brilliant: {
             const Piece& moved = after.at(r.played.to);
-            const std::string what =
-                moved.empty() ? std::string("Material") : pieceAccusative(reg.get(moved.type));
-            text = me + " opfert " + what + ". " + opp +
-                   " kann zugreifen, steht danach aber nicht besser – das Opfer ist durchgerechnet.";
-            if (!threat.empty()) text += " Die Idee: " + endSentence(threat);
+            const std::string what = moved.empty() ? L("Material", "material") : object(reg.get(moved.type));
+            text = en ? me + " sacrifices " + what + ". " + opp +
+                            " can take it, but is not better afterwards – the sacrifice is calculated."
+                      : me + " opfert " + what + ". " + opp +
+                            " kann zugreifen, steht danach aber nicht besser – das Opfer ist durchgerechnet.";
+            if (!threat.empty()) text += L(" Die Idee: ", " The idea: ") + endSentence(threat);
             break;
         }
         case MoveQuality::Great: {
             const int gap = r.bestScore.clamped(1500) - (r.secondScore ? r.secondScore->clamped(1500) : 0);
-            text = "Nur dieser Zug hält die Stellung. Der nächstbeste Zug wäre um " + pawns(gap) +
-                   " Bauerneinheiten schlechter.";
-            if (!threat.empty()) text += " Weiter geht es mit " + endSentence(threat);
+            text = en ? "Only this move holds the position. The next best move would be " + amount(gap) +
+                            " pawns worse."
+                      : "Nur dieser Zug hält die Stellung. Der nächstbeste Zug wäre um " + amount(gap) +
+                            " Bauerneinheiten schlechter.";
+            if (!threat.empty()) text += L(" Weiter geht es mit ", " It continues with ") + endSentence(threat);
             break;
         }
         case MoveQuality::Best:
         case MoveQuality::Excellent:
         case MoveQuality::Good: {
             if (r.playedScore.mate && r.playedScore.winning && r.playedScore.value == 0)
-                text = "Schachmatt.";
+                text = L("Schachmatt.", "Checkmate.");
             else if (r.playedScore.mate && r.playedScore.winning)
-                text = "Danach ist das Matt in " + std::to_string(r.playedScore.value) + " nicht mehr aufzuhalten.";
+                text = en ? "Mate in " + std::to_string(r.playedScore.value) + " can no longer be stopped."
+                          : "Danach ist das Matt in " + std::to_string(r.playedScore.value) + " nicht mehr aufzuhalten.";
             else if (const PieceType* cap = capturedBy(before, r.played))
-                text = "Schlägt " + pieceAccusative(*cap) + ".";
+                text = L("Schlägt ", "Captures ") + object(*cap) + ".";
             if (r.quality == MoveQuality::Best) {
-                if (text.empty()) text = "Genau der Zug, den die Engine auch wählt.";
+                if (text.empty()) text = L("Genau der Zug, den die Engine auch wählt.", "Exactly the move the engine picks too.");
             } else {
-                text += (text.empty() ? "" : " ") + std::string(r.quality == MoveQuality::Excellent
-                                                                    ? "Fast so stark wie "
-                                                                    : "Ordentlich. Etwas genauer war ") +
+                text += (text.empty() ? "" : " ") + (r.quality == MoveQuality::Excellent
+                                                         ? L("Fast so stark wie ", "Almost as strong as ")
+                                                         : L("Ordentlich. Etwas genauer war ", "Decent. A bit more precise was ")) +
                         r.bestSan + ".";
             }
             break;
         }
-        case MoveQuality::Forced: text = "Es gab keinen anderen legalen Zug."; break;
+        case MoveQuality::Forced: text = L("Es gab keinen anderen legalen Zug.", "There was no other legal move."); break;
         default: {
             // Warum war es schlecht?
             if (r.playedScore.mate && !r.playedScore.winning) {
-                text = "Danach kann " + opp + " in " + std::to_string(std::max(1, r.playedScore.value)) +
-                       " Zügen mattsetzen";
+                const std::string n = std::to_string(std::max(1, r.playedScore.value));
+                text = en ? "Now " + opp + " can mate in " + n + (n == "1" ? " move" : " moves")
+                          : "Danach kann " + opp + " in " + n + " Zügen mattsetzen";
                 text += threat.empty() ? std::string(".") : ": " + endSentence(threat);
             } else {
                 const int lossAlongThreat =
                     materialBalance(after, r.mover) - worstBalanceAlong(after, r.threatLine, r.mover, 3);
                 const PieceType* cap = r.threatLine.empty() ? nullptr : capturedBy(after, r.threatLine.front());
                 if (cap && lossAlongThreat >= 100 && !r.threatLineSan.empty()) {
-                    text = opp + " gewinnt danach " + pieceAccusative(*cap) + " mit " + r.threatLineSan.front() + ".";
+                    text = en ? opp + " then wins " + object(*cap) + " with " + r.threatLineSan.front() + "."
+                              : opp + " gewinnt danach " + object(*cap) + " mit " + r.threatLineSan.front() + ".";
                 } else {
                     // Steht eine eigene Figur danach ungedeckt?
                     for (Square s = 0; s < after.squareCount() && text.empty(); ++s) {
                         const Piece& p = after.at(s);
                         if (p.empty() || p.color != r.mover || reg.get(p.type).royal) continue;
-                        if (isEnPrise(after, s) && !isEnPrise(before, s == r.played.to ? r.played.from : s))
-                            text = pieceNominative(reg.get(p.type)) + " auf " + std::string(1, char('a' + after.fileOf(s))) +
-                                   std::to_string(after.rankOf(s) + 1) + " hängt danach.";
+                        if (isEnPrise(after, s) && !isEnPrise(before, s == r.played.to ? r.played.from : s)) {
+                            const std::string sq =
+                                std::string(1, char('a' + after.fileOf(s))) + std::to_string(after.rankOf(s) + 1);
+                            text = en ? subject(reg.get(p.type)) + " on " + sq + " is left hanging."
+                                      : subject(reg.get(p.type)) + " auf " + sq + " hängt danach.";
+                        }
                     }
                 }
                 if (text.empty()) {
-                    char buf[160];
-                    std::snprintf(buf, sizeof(buf), "Die Gewinnchance für %s sinkt von %.0f %% auf %.0f %%.",
-                                  me.c_str(), r.winBefore, r.winAfter);
+                    char buf[200];
+                    if (en)
+                        std::snprintf(buf, sizeof(buf), "%s's winning chances drop from %.0f %% to %.0f %%.", me.c_str(),
+                                      r.winBefore, r.winAfter);
+                    else
+                        std::snprintf(buf, sizeof(buf), "Die Gewinnchance für %s sinkt von %.0f %% auf %.0f %%.",
+                                      me.c_str(), r.winBefore, r.winAfter);
                     text = buf;
                 }
                 if (!threat.empty() && text.find(threat) == std::string::npos)
-                    text += " Die beste Antwort von " + opp + ": " + endSentence(threat);
+                    text += (en ? " " + opp + "'s best reply: " : " Die beste Antwort von " + opp + ": ") +
+                            endSentence(threat);
             }
             if (r.quality == MoveQuality::Miss && prev) {
                 std::string chance;
                 if (r.bestScore.mate && r.bestScore.winning)
-                    chance = "in " + std::to_string(r.bestScore.value) + " Zügen mattsetzen können";
-                else if (const PieceType* cap = r.best.valid() ? capturedBy(before, r.best) : nullptr)
-                    chance = pieceAccusative(*cap) + " gewinnen können";
-                text = opp + " hatte gerade mit " + prev->san + " einen Fehler gemacht. " +
-                       (chance.empty() ? std::string("Die Gelegenheit blieb ungenutzt. ")
-                                       : "Mit " + r.bestSan + " hättest du " + chance + ". ") +
-                       text;
+                    chance = en ? "mated in " + std::to_string(r.bestScore.value)
+                                : "in " + std::to_string(r.bestScore.value) + " Zügen mattsetzen können";
+                else if (const PieceType* c2 = r.best.valid() ? capturedBy(before, r.best) : nullptr)
+                    chance = en ? "won " + object(*c2) : object(*c2) + " gewinnen können";
+                if (en)
+                    text = opp + " had just made a mistake with " + prev->san + ". " +
+                           (chance.empty() ? std::string("The chance was not used. ")
+                                           : "With " + r.bestSan + " you could have " + chance + ". ") +
+                           text;
+                else
+                    text = opp + " hatte gerade mit " + prev->san + " einen Fehler gemacht. " +
+                           (chance.empty() ? std::string("Die Gelegenheit blieb ungenutzt. ")
+                                           : "Mit " + r.bestSan + " hättest du " + chance + ". ") +
+                           text;
             }
             if (!r.bestSan.empty())
-                text += " Besser war " + r.bestSan + " (" + r.bestScore.toString() + ")" +
+                text += L(" Besser war ", " Better was ") + r.bestSan + " (" + r.bestScore.toString() + ")" +
                         (bestLine.empty() ? std::string(".") : ": " + endSentence(bestLine));
             break;
         }
     }
-    r.explanation = text;
+    explanation = text;
 }
 
+void explain(MoveReview& r, const Position& before, const Position& after, const MoveReview* prev) {
+    explainIn(r, before, after, prev, false, r.headline, r.explanation);
+    explainIn(r, before, after, prev, true, r.headlineEn, r.explanationEn);
+}
 }  // namespace
 
 // ===========================================================================

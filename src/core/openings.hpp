@@ -12,7 +12,13 @@ struct Opening {
     std::string name;
     std::vector<std::string> moves;  // SAN ohne Schach-/Bewertungszeichen
     bool forBlack = false;           // wer die Eroeffnung "waehlt" (fuer das Training)
+    std::string nameEn;              // englischer Name
+
+    const std::string& displayName(bool english) const { return english ? nameEn : name; }
 };
+
+// Deutscher Name -> Anzeigename in der gewaehlten Sprache (unbekannte Namen bleiben)
+std::string localizedOpeningName(const std::string& german, bool english);
 
 const std::vector<Opening>& openings();
 

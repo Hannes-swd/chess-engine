@@ -1,6 +1,8 @@
 {
   "name": "Clubspieler",
   "description": "Solider Vereinsspieler. Rechnet zwei, drei Züge voraus und nimmt sich Zeit, wenn es kompliziert wird.",
+  "name_en": "Club Player",
+  "description_en": "Solid club player. Calculates two or three moves ahead and takes time when it gets complicated.",
   "engine": "auto",
   "strength": 1500,
   "movetimeMs": 400,

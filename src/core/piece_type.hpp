@@ -41,6 +41,10 @@ struct PieceType {
     bool promotionTarget = false;  // Bauern duerfen sich in diese Figur umwandeln
 
     CustomMoveFn customMoves;  // optional, zusaetzlich zu `steps`
+
+    // Optionale Bilder (Dateipfade, z. B. aus einem Plugin). Leer = Symbol bzw. Scheibe mit Buchstabe.
+    std::string imageWhite;
+    std::string imageBlack;
 };
 
 class PieceRegistry {

@@ -10,6 +10,7 @@
 #include "engine/training.hpp"
 #include "engine/uci_engine.hpp"
 #include "ui/board_view.hpp"
+#include "ui/image_cache.hpp"
 #include "plugins/lua_plugin.hpp"
 #include "ui/settings.hpp"
 #include "ui/sound.hpp"
@@ -19,6 +20,7 @@
 #include <chrono>
 #include <filesystem>
 #include <future>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,7 +29,7 @@
 namespace chess::ui {
 
 // Bereiche der linken Navigation
-enum class Mode { Play, Analysis, Training, Bots, Games, Stats, Plugins, Settings };
+enum class Mode { Home, Play, Analysis, Training, Bots, Games, Stats, Plugins, Settings };
 
 // Die komplette Oberflaeche:
 //   oben    Top-Leiste (Logo, Status, Elo, Bilanz, Engine, Design)
@@ -50,11 +52,12 @@ public:
     // "e2e4" = Pfeil, "d5" = Kreis; optional ein Feld auswaehlen und einen Tipp anfordern.
     void demoMarks(const std::string& marks, const std::string& select, bool hint);
     // 0 Spielen/Zuege, 1 Bots, 2 Analyse, 3 Partien, 4 Einstellungen, 5 Spielen/Neue Partie,
-    // 6 Training/Aufgaben, 7 Statistik, 8 Plugins, 9 Training/Eroeffnungen
+    // 6 Training/Aufgaben, 7 Statistik, 8 Plugins, 9 Training/Eroeffnungen, 10 Startseite
     void requestTab(int tab) {
         static const Mode modes[] = {Mode::Play,     Mode::Bots,  Mode::Analysis, Mode::Games,    Mode::Settings,
-                                     Mode::Play,     Mode::Training, Mode::Stats, Mode::Plugins, Mode::Training};
-        if (tab < 0 || tab > 9) return;
+                                     Mode::Play,     Mode::Training, Mode::Stats, Mode::Plugins, Mode::Training,
+                                     Mode::Home};
+        if (tab < 0 || tab > 10) return;
         trainTab_ = tab == 9 ? 1 : 0;
         mode_ = modes[tab];
         playTab_ = tab == 5 ? 0 : 1;
@@ -84,9 +87,13 @@ public:
         }
     }
     void requestBoardTheme(int i) { settings_.boardTheme = i, applyTheme(); }
+    void requestPieceSet(int i) { settings_.pieceSet = i, applyTheme(); }
+    void requestLanguage(int i) { settings_.language = i, applyTheme(); }
     void requestPreview(int steps) { requestedPreview_ = steps; }  // nach der Analyse: bessere Variante zeigen
     // Testmodus (Screenshots): nichts auf die Platte schreiben – keine Partien, keine Elo, keine Einstellungen
     void setSandbox(bool on) { sandbox_ = on; }
+    // Fuer Bilder (Plugin-Icons, Vorschaubilder): der SDL-Renderer des Fensters
+    void setRenderer(SDL_Renderer* r) { images_.setRenderer(r); }
     // Fuer Screenshots: Design/Hilfen setzen, ohne die gespeicherten Einstellungen zu aendern
     void overrideTheme(bool dark) {
         settings_.darkTheme = dark;
@@ -123,7 +130,8 @@ private:
     bool botThinking() const { return botJob_.valid() || pendingBot_.has_value(); }
     bool analysisRunning() const { return analysisJob_.valid(); }
     bool hintRunning() const { return hintJob_.valid(); }
-    bool engineBusy() const { return botJob_.valid() || analysisRunning() || hintRunning(); }
+    bool engineBusy() const { return botJob_.valid() || analysisRunning() || hintRunning() || harvestRunning(); }
+    bool harvestRunning() const { return harvestJob_.valid(); }
 
     // --- Zeichnen -------------------------------------------------------------
     void handleShortcuts();
@@ -179,12 +187,26 @@ private:
 
     // --- Plugins (plugins_panel.cpp) -----------------------------------------------
     void reloadPlugins();
+    void applyPluginUi();  // ui.*-Aufrufe der Plugins ausfuehren (Meldung, Klang, Markierung)
     Variant currentVariant();  // Standardschach + aktive Plugins (fuer jede neue Partie neu gebaut)
     void panelPlugins();
     std::vector<plugins::PluginInfo> plugins_;
     std::vector<std::string> pluginErrors_;
     std::vector<std::shared_ptr<plugins::LuaPlugin>> gamePlugins_;  // Plugins der laufenden Partie (fuer das Log)
     bool pluginGame_ = false;  // laufende Partie nutzt Plugins -> ungewertet
+    bool pluginPlayerStarts_ = false;  // ein aktives Plugin will, dass der Mensch den ersten Zug macht
+    std::string pluginSel_;    // in der Plugin-Ansicht ausgewaehlt (Detailseite in der Mitte)
+    struct PluginSummary {
+        std::optional<Position> start;   // Startstellung des Plugins allein
+        std::vector<std::string> facts;  // was es aendert, aus der gebauten Variante abgelesen
+        std::string error;
+    };
+    std::map<std::string, PluginSummary> pluginSummaries_;
+    const PluginSummary& pluginSummary(const plugins::PluginInfo& info);
+    void drawPluginDetail();
+    void drawPluginIcon(ImDrawList* dl, const plugins::PluginInfo& p, ImVec2 p0, float size);
+    void drawMiniBoard(ImDrawList* dl, const Position& pos, ImVec2 p0, float size);
+    ImageCache images_;
 
     // --- Spielgefuehl ----------------------------------------------------------------
     void playSounds(const Position& before, const Move& m);
@@ -227,7 +249,7 @@ private:
     void loadTraining();
     void saveTraining();
     void collectPuzzles();  // nach einer Analyse: eigene Fehler als Aufgaben
-    void startPuzzle();
+    void startPuzzle(int forced = -1);
     void startOpeningDrill(size_t opening);
     void drillMove(const Move& m);
     void tickDrill();
@@ -238,9 +260,21 @@ private:
     int trainTab_ = 0;
     char openingFilter_[64] = {};
     int collectedGen_ = -1;
+    // Aufgaben aus gespeicherten Partien nachtraeglich sammeln (Hintergrund-Analyse)
+    void startHarvest();
+    void finishHarvest();  // in pollJobs: fertige Auswertung uebernehmen
+    std::vector<std::filesystem::path> harvestCandidates();
+    std::future<std::vector<Puzzle>> harvestJob_;
+    std::vector<std::string> harvestFiles_;
+    std::shared_ptr<std::atomic<int>> harvestDone_ = std::make_shared<std::atomic<int>>(0);
+    int harvestTotal_ = 0;
 
     // --- Statistik (stats_panel.cpp) ------------------------------------------------------
     void panelStats();
+    // --- Startseite (home_panel.cpp) -----------------------------------------------------------
+    void drawHome();
+    std::filesystem::path homeLastPath_;
+    std::optional<Position> homeLastPos_;
     void drawEloCurve(float height);
 
     // --- Weiteres -----------------------------------------------------------------------
@@ -251,7 +285,10 @@ private:
     const Position& viewedPosition() const;
     int viewPly() const { return view_ < 0 ? game_.ply() : view_; }
     bool isLive() const { return view_ < 0; }
-    std::string playerName(Color side) const;
+    std::string playerName(Color side) const;   // Anzeige (Sprache)
+    std::string pgnName(Color side) const;      // fuer Dateien (Deutsch, "Du")
+    std::string displayPlayer(const std::string& stored) const;  // gespeicherter Name -> Anzeige
+    std::string displaySource(const std::string& source) const;  // "Du – Clubspieler, 26.11.2026" -> Anzeige
     std::string resultTitle(const GameOutcome& out) const;
     std::string moveLabel(int ply) const;
     std::optional<Score> whiteEvalAt(int ply) const;

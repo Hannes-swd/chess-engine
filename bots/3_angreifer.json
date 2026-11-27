@@ -1,6 +1,8 @@
 {
   "name": "Angreifer",
   "description": "Sucht Schläge und Schachs, schiebt Bauern nach vorne und zieht schnell und impulsiv.",
+  "name_en": "Attacker",
+  "description_en": "Hunts for captures and checks, pushes pawns forward and moves quickly and impulsively.",
   "engine": "auto",
   "strength": 1200,
   "movetimeMs": 300,

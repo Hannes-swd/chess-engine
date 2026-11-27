@@ -1,6 +1,9 @@
 {
   "name": "Zufallsaufstellung",
   "description": "Die Figuren der Grundreihe werden zufällig gemischt (wie Schach960: Läufer auf verschiedenen Farben, König zwischen den Türmen). Ohne Rochade.",
+  "name_en": "Random Setup",
+  "description_en": "The back-rank pieces are shuffled (like Chess960: bishops on opposite colours, king between the rooks). No castling.",
+  "color": "#3F6E6A",
   "author": "ChessEngine",
   "version": "1.0",
   "priority": 5

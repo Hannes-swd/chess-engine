@@ -10,9 +10,15 @@ Ein Plugin ist ein Ordner mit zwei Dateien:
 ```
 Dokumente\ChessEngine\Plugins\
   mein_plugin\
-    plugin.json   Name, Beschreibung, Priorität
+    plugin.json   Name, Beschreibung, Farbe
     main.lua      die Regeln
+    icon.png      optional: quadratisches Icon (z. B. 256 × 256), erscheint in der Liste
+    vorschau.png  optional: großes Bild für die Detailseite
 ```
+
+Ohne `vorschau.png` zeigt die Detailseite die echte Startstellung des Plugins als Mini-Brett. Ohne
+`icon.png` gibt es eine Farbfläche mit dem Anfangsbuchstaben. PNG, JPG, BMP und GIF werden gelesen;
+andere Dateinamen lassen sich in plugin.json mit `"icon"` und `"preview"` angeben.
 
 Beim ersten Start kopiert das Programm die mitgelieferten Beispiele einmal in diesen Ordner. Die Liste im
 Bereich **Plugins** zeigt genau, was dort liegt: Ordner hineinlegen und „Neu einlesen“ klicken, oder einen
@@ -27,9 +33,18 @@ sich die Datei `.beispiele`).
   "description": "Ein Satz, was es ändert.",
   "author": "Du",
   "version": "1.0",
-  "priority": 0
+  "color": "#3F6E6A"
 }
 ```
+
+Für Englisch kommen optional `"name_en"` und `"description_en"` dazu; ohne sie zeigt die englische
+Oberfläche den deutschen Text.
+
+`color` ist die Akzentfarbe des Plugins (Rahmen der Vorschau, Haken auf der Detailseite, Icon-Ersatz).
+
+Unter **„Was es ändert“** listet die Detailseite selbstständig auf, was das Plugin tatsächlich tut:
+Brettgröße, neue Figuren, eigene oder zufällige Startstellung, Zugfilter, Siegbedingungen. Dafür wird das
+Plugin einmal probehalber geladen.
 
 Welche Plugins aktiv sind und in welcher Reihenfolge, bestimmst du im Bereich **Plugins**: links
 „Verfügbar“, rechts „Aktiv“. Ein Plugin wird per Ziehen (oder Doppelklick) aktiviert; in „Aktiv“ sortierst
@@ -88,6 +103,17 @@ rules.add_piece{
 
 Weitere Felder: `royal = true` (Schach und Matt beziehen sich auf diese Figur), `pawn_like = true`
 (Doppelschritt, en passant, Umwandlung), `castles = true`.
+
+Eigene Bilder für die Figur (PNG/JPG im Plugin-Ordner, am besten quadratisch mit transparentem Rand):
+
+```lua
+image_white = "figuren/drache_weiss.png",
+image_black = "figuren/drache_schwarz.png",
+-- oder image = "drache.png" für beide Farben
+```
+
+Ohne Bild erscheint die Figur als Scheibe mit ihrem Buchstaben. Pfade außerhalb des Plugin-Ordners
+(absolut oder mit `..`) werden abgelehnt.
 
 Eigene Zugmuster als Schritte:
 
@@ -151,6 +177,47 @@ filter_moves = function(board, moves)
   return moves
 end
 ```
+
+## Zwei Sprachen (`lang`)
+
+Die globale Variable `lang` ist `"de"` oder `"en"`, je nach Sprache der Oberfläche beim Start der Partie.
+So schreibt ein Plugin Namen, Meldungen und Gründe in der richtigen Sprache:
+
+```lua
+rules.set_name(lang == "en" and "Atomic Chess" or "Atomschach")
+return color, lang == "en" and "King on the hill" or "König auf dem Hügel"
+```
+
+`opening_name("Italienische Partie")` liefert den Namen einer bekannten Eröffnung in der aktuellen Sprache
+(„Italian Game“).
+
+## Mit der Oberfläche sprechen (`ui`)
+
+In `on_setup` und `on_move` gibt es die Tabelle `ui`:
+
+| Funktion | Wirkung |
+|---|---|
+| `ui.message(text)` | Meldung in der Statuszeile |
+| `ui.sound(name)` | Klang: `"move"`, `"capture"`, `"check"`, `"tick"`, `"end"`, `"correct"`, `"wrong"` |
+| `ui.mark(x, y, [farbe])` | Kreis auf einem Feld; Farbe `"green"`, `"red"`, `"blue"` oder `"yellow"` |
+| `ui.arrow(x1, y1, x2, y2, [farbe])` | Pfeil zwischen zwei Feldern |
+
+Markierungen verschwinden mit dem nächsten Zug. Die Aufrufe wirken nur bei echten Zügen auf dem Brett:
+Wenn ein Bot in Gedanken Züge durchrechnet, laufen die Plugin-Regeln zwar mit, erzeugen aber keine
+Meldungen. Beispiel: `atomschach` markiert explodierte Felder rot.
+
+## Bots und Plugin-Regeln
+
+Die eingebaute Engine rechnet in Partien mit Plugins auf Kopien der Partie. So durchläuft jeder Zug, den
+ein Bot in Gedanken prüft, dieselben Regeln wie im Spiel: `filter_moves`, `on_move` und `check_end`.
+Ein Bot sieht also, dass ein Schlag im Atomschach den eigenen König sprengt oder dass ein Königszug auf
+den Hügel gewinnt. Das ist langsamer als normales Schach, deshalb rechnen Bots dort höchstens 4 Halbzüge
+voraus.
+
+## Aufgaben-Plugins
+
+`"player_moves_first": true` in plugin.json: Gegen einen Bot spielst du immer die Seite, die in der
+Startstellung am Zug ist (so funktioniert `matt_in_eins` mit Weiß und Schwarz).
 
 ## Partieende (`check_end`)
 

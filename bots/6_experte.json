@@ -1,6 +1,8 @@
 {
   "name": "Experte",
   "description": "Turnierspieler mit guter Taktik. Fehler macht er selten – meist erst, wenn die Uhr knapp wird.",
+  "name_en": "Expert",
+  "description_en": "Tournament player with good tactics. Rarely makes mistakes – mostly when the clock runs low.",
   "engine": "auto",
   "strength": 2200,
   "movetimeMs": 700,
