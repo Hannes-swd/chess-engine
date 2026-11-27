@@ -98,6 +98,39 @@ TEST_CASE(checkmate_fools_mate_and_pgn) {
     CHECK(pgn.find("[Result \"0-1\"]") != std::string::npos);
 }
 
+TEST_CASE(pgn_roundtrip_and_import) {
+    // Eigene Ausgabe mit Bewertungs-Kommentaren wieder einlesen
+    Game g;
+    for (const char* m : {"e4", "e5", "Nf3", "Nc6", "Bb5"}) CHECK(g.play(m));
+    const std::vector<std::string> comments = {"[%eval 0.30]", "", "[%eval 0.25] Gut", "", ""};
+    const auto rec = parsePgn(toPgn(g, {{"White", "Anna \"A.\""}}, &comments));
+    CHECK(rec.has_value());
+    CHECK_EQ(rec->moves.size(), size_t{5});
+    CHECK_EQ(rec->tag("White"), std::string("Anna \"A.\""));
+    const Game back = gameFromPgn(*rec);
+    CHECK_EQ(back.ply(), 5);
+    CHECK_EQ(back.sanMoves()[4], std::string("Bb5"));
+
+    // Fremdes PGN: Zugnummern ohne Leerzeichen, Varianten, NAGs, Bewertungszeichen, Aufgabe
+    const auto other = parsePgn(
+        "[Event \"Test\"]\n[Result \"1-0\"]\n\n1.e4 e5 2.Nf3 (2.f4 exf4 {Koenigsgambit}) 2...Nc6 $1 "
+        "3.Bc4!? Nf6?? ; Fehler\n4.Ng5 1-0\n\n[Event \"Zweite\"]\n1. d4 *");
+    CHECK(other.has_value());
+    CHECK_EQ(other->moves.size(), size_t{7});
+    const Game og = gameFromPgn(*other);
+    CHECK(og.outcome().result == GameResult::WhiteWins);  // Ergebnis aus der Datei, kein Matt
+    CHECK_EQ(og.sanMoves()[6], std::string("Ng5"));
+
+    bool threw = false;
+    try {
+        gameFromPgn(*parsePgn("1. e4 e5 2. Ke3"));
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw);
+    CHECK(!parsePgn("   \n").has_value());
+}
+
 TEST_CASE(stalemate) {
     Game g(variantFromFen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1"));
     const auto out = g.outcome();

@@ -1,4 +1,4 @@
-﻿# ChessEngine
+# ChessEngine
 
 Ein Schachprogramm zum Lernen, in C++ – ohne Abo, ohne Paywall. Spiel gegen Bots mit eigener
 Persönlichkeit, lass jede Partie von Stockfish auswerten und sieh Zug für Zug, was gut war, was
@@ -8,22 +8,39 @@ schiefging und was besser gewesen wäre.
 
 ## Was es kann
 
-- **Gegen Bots spielen** – sechs Bots vom Einsteiger bis zur vollen Stockfish-Stärke, mit Spielstil
+- **Gegen Bots spielen** – acht Bots vom Einsteiger bis zur vollen Stockfish-Stärke, mit Spielstil
   (aggressiv/vorsichtig), Zufall, Patzern und menschlicher Bedenkzeit. Alles einstellbar und als Profil
-  speicherbar.
+  speicherbar. Eigene Bots lassen sich direkt in der App anlegen.
 - **Auf Zeit** – Bullet, Blitz, Schnellschach oder eigene Zeit mit Inkrement.
 - **Partieanalyse wie bei großen Schachseiten** – Bewertungskurve, Genauigkeit, Kategorien von
   *Brillant* bis *Patzer*, eine Erklärung zu jedem Zug und die bessere Variante zum Durchspielen.
 - **Hilfen zum Lernen** – mögliche Züge, gefährliche Felder, bedrohte Figuren, Tipp-Funktion, eigene
   Pfeile und Kreise. Jede Hilfe einzeln abschaltbar, bis hin zum Turniermodus ohne Hilfen.
-- **Elo** – lokale Wertung gegen die Bots.
-- **PGN-Export** – jede Partie als Text, mit Bewertungen als Kommentare.
-- **Offen für Varianten** – Brettgröße, Figuren und Regeln sind im Kern frei definierbar
-  (Grundlage für die geplanten Lua-Plugins).
+- **Training aus eigenen Fehlern** – jeder Fehler und Patzer aus der Analyse wird zur Aufgabe
+  „Finde den besseren Zug“. Wiederholung nach dem Karteikasten-Prinzip: Gelöstes kommt nach Tagen
+  wieder, Falsches schon bald.
+- **Eröffnungen** – gut 100 bekannte Linien mit deutschen Namen, angezeigt in Zugliste und Partienliste,
+  dazu ein Eröffnungs-Trainer, in dem der Gegner nach Theorie antwortet.
+- **Elo und Statistik** – lokale Wertung gegen die Bots mit Verlauf als Kurve, Bilanz mit Weiß/Schwarz
+  und je Bot, Genauigkeit im Schnitt, häufigste Fehlerarten, eigene Eröffnungen.
+- **Spielgefühl** – gleitende Figuren, leise Klänge, Züge vormerken (Premove), Remis anbieten,
+  offene Partie beim nächsten Start fortsetzen, sechs Brett-Designs.
+- **PGN-Export und -Import** – jede Partie als Text, mit Bewertungen als Kommentare; gespeicherte Partien (oder PGN aus der Zwischenablage) wieder öffnen und analysieren.
+- **Lua-Plugins** – Brettgröße, neue Figuren (auch mit eigener Zugfunktion), Startaufstellung,
+  Zugregeln und Siegbedingungen per Plugin ändern. Abgeschottet: kein Zugriff auf Dateien, System
+  oder Netz. Acht Beispiele liegen bei, darunter ein Start aus zufälligen Mittelspiel-Stellungen, die Anleitung steht in [docs/PLUGINS.md](docs/PLUGINS.md).
 
 | Partie gegen einen Bot | Variante durchspielen |
 |---|---|
 | ![Partie](docs/screenshot-partie.png) | ![Variante](docs/screenshot-variante.png) |
+
+| Aufgaben aus eigenen Fehlern | Eröffnungs-Trainer |
+|---|---|
+| ![Training](docs/screenshot-training.png) | ![Eröffnung](docs/screenshot-eroeffnung.png) |
+
+| Lua-Plugins (hier: Riesenbrett 10×10) | Statistik |
+|---|---|
+| ![Plugins](docs/screenshot-plugins.png) | ![Statistik](docs/screenshot-statistik.png) |
 
 ## Schnellstart
 
@@ -41,7 +58,16 @@ Für die volle Stärke [Stockfish herunterladen](https://stockfishchess.org/down
 `stockfish*.exe` nach `engines\` im Projektordner legen (Details unten). Ohne Stockfish spielt und
 analysiert die eingebaute, schwächere Engine.
 
-Mehr zum Hintergrund: [Plan](docs/PLAN.md) · [Design](docs/DESIGN.md) · [Fremde Bestandteile](THIRD_PARTY.md)
+Zum Weitergeben ohne Visual Studio:
+
+```powershell
+cmake --build build --config Release --target package
+```
+
+Das erzeugt `build\ChessEngine-1.0.0-win64.zip` mit Programm, Bots, Plugins und Anleitung. Wer es
+entpackt, legt Stockfish nur noch in den Ordner `engines`.
+
+Mehr zum Hintergrund: [Plan](docs/PLAN.md) · [Plugins](docs/PLUGINS.md) · [Design](docs/DESIGN.md) · [Fremde Bestandteile](THIRD_PARTY.md)
 
 Lizenz: [MIT](LICENSE). Eingebundene Bibliotheken behalten ihre eigenen Lizenzen (siehe
 [THIRD_PARTY.md](THIRD_PARTY.md)); Stockfish ist nicht enthalten.
@@ -52,9 +78,9 @@ Lizenz: [MIT](LICENSE). Eingebundene Bibliotheken behalten ihre eigenen Lizenzen
 |---|---|
 | 1. Kern (Brett W×H, Figuren als Daten, Regeln, Hooks, FEN/SAN/PGN) | ✅ fertig |
 | 2. Grafische Oberfläche (SDL2 + Dear ImGui) | ✅ fertig |
-| 3. Speichern (SQLite) & Partieliste | teilweise: PGN wird automatisch gespeichert, Partieliste fehlt |
+| 3. Speichern & Partieliste | ✅ PGN-Dateien mit Partieliste (SQLite nicht nötig) |
 | 4. Stockfish: Bots + Zuganalyse | ✅ fertig (UCI-Client, eingebaute Engine, 5 Bot-Profile, Analyse) |
-| 5. Lua-Plugins | offen (die Hooks im Kern sind schon da) |
+| 5. Lua-Plugins | ✅ fertig (Sandbox, Spiel-API, 8 Beispiele, Plugin-Bereich) |
 | 6. Design / Zen-Modus | ✅ Grundlage fertig (Theme hell/dunkel, Zen-Modus) |
 
 ## Bauen (Windows, Visual Studio 2022)
@@ -93,7 +119,7 @@ mit Tooltips statt Text:
     Icon-Leisten: Anfang/zurück/vor/Ende, Zurücknehmen, Drehen, Tipp, Markierungen löschen, Aufgeben)
   - *Analyse* – jede Stellung mit Stockfish bewerten, „besser war …“, bester Zug als Pfeil
   - *Bots* – alle Bots mit geschätzter Elo, „Gegen … spielen“, Bot anpassen
-  - *Partien* – PGN kopieren/speichern, FEN, Stellung laden
+  - *Partien* – gespeicherte Partien öffnen, PGN aus der Zwischenablage, PGN kopieren/speichern, FEN
   - *Einstellungen* – alle Hilfen einzeln (siehe unten)
 
 **Elo:** Gewertet werden Partien gegen Bots in der normalen Startstellung, ohne Zurücknehmen und ohne
@@ -243,7 +269,7 @@ src/core/
   notation.*       SAN und UCI-Notation
   hooks.hpp        Eingriffspunkte für Plugins (mit Priorität und Besitzer)
   game.*           Partie: Verlauf, Zurücknehmen, Hooks, Matt/Patt/Remis
-  pgn.*            PGN-Export
+  pgn.*            PGN-Export und -Import
 src/util/json.*    kleiner JSON-Leser
 src/engine/
   engine.hpp       gemeinsame Engine-Schnittstelle (Suche, MultiPV, Stärke)

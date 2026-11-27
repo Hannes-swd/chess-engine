@@ -1,0 +1,10 @@
+{
+  "name": "Turbo",
+  "description": "Zieht sofort, ohne lange nachzudenken – ideal für Bullet und schnelles Üben.",
+  "engine": "auto",
+  "strength": 1100,
+  "movetimeMs": 100,
+  "aggression": 0.3,
+  "pressureBlunder": 0.1,
+  "tempo": { "mode": "instant" }
+}

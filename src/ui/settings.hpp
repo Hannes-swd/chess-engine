@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace chess::ui {
 
@@ -32,6 +33,11 @@ struct AssistSettings {
     bool darkTheme = true;
     bool sidebarExpanded = true;  // linke Leiste mit Beschriftung oder nur Icons
     bool autoAnalyse = true;      // Partie nach dem Ende automatisch analysieren
+    bool animations = true;       // Figuren gleiten statt zu springen
+    bool sounds = true;           // Klang fuer Zug, Schlag, Schach, Zeitnot
+    bool premoves = true;         // Zug vormerken, waehrend der Bot denkt
+    int boardTheme = 0;           // Index in Theme::boardThemes()
+    std::vector<std::string> plugins;  // aktive Plugins (Ordnernamen)
 
     static AssistSettings learning();  // alles an
     static AssistSettings standard();  // Voreinstellung

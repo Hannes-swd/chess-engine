@@ -32,6 +32,9 @@ std::vector<std::pair<const char*, bool AssistSettings::*>> fields() {
         {"darkTheme", &AssistSettings::darkTheme},
         {"sidebarExpanded", &AssistSettings::sidebarExpanded},
         {"autoAnalyse", &AssistSettings::autoAnalyse},
+        {"animations", &AssistSettings::animations},
+        {"sounds", &AssistSettings::sounds},
+        {"premoves", &AssistSettings::premoves},
     };
 }
 
@@ -66,7 +69,9 @@ AssistSettings AssistSettings::none() {
 bool AssistSettings::sameAssists(const AssistSettings& o) const {
     for (const auto& [name, member] : fields()) {
         const std::string n = name;
-        if (n == "coordinates" || n == "darkTheme" || n == "sidebarExpanded" || n == "autoAnalyse") continue;
+        if (n == "coordinates" || n == "darkTheme" || n == "sidebarExpanded" || n == "autoAnalyse" ||
+            n == "animations" || n == "sounds" || n == "premoves")
+            continue;
         if (this->*member != o.*member) return false;
     }
     return true;
@@ -75,17 +80,31 @@ bool AssistSettings::sameAssists(const AssistSettings& o) const {
 std::string AssistSettings::toJson() const {
     std::string s = "{\n";
     const auto f = fields();
-    for (size_t i = 0; i < f.size(); ++i) {
-        s += std::string("  \"") + f[i].first + "\": " + (this->*(f[i].second) ? "true" : "false");
-        s += i + 1 < f.size() ? ",\n" : "\n";
+    for (size_t i = 0; i < f.size(); ++i)
+        s += std::string("  \"") + f[i].first + "\": " + (this->*(f[i].second) ? "true" : "false") + ",\n";
+    s += "  \"boardTheme\": " + std::to_string(boardTheme) + ",\n";
+    s += "  \"plugins\": [";
+    for (size_t i = 0; i < plugins.size(); ++i) {
+        std::string id;
+        for (char ch : plugins[i]) {
+            if (ch == '"' || ch == '\\') id += '\\';
+            id += ch;
+        }
+        s += (i ? ", \"" : "\"") + id + "\"";
     }
-    return s + "}\n";
+    return s + "]\n}\n";
 }
 
 bool AssistSettings::fromJson(const std::string& text) {
     const auto v = json::parse(text);
     if (!v || !v->isObject()) return false;
     for (const auto& [name, member] : fields()) this->*member = v->getBool(name, this->*member);
+    boardTheme = static_cast<int>(v->getNumber("boardTheme", boardTheme));
+    if (const json::Value* list = v->find("plugins"); list && list->isArray()) {
+        plugins.clear();
+        for (const json::Value& e : list->asArray())
+            if (e.isString()) plugins.push_back(e.asString());
+    }
     return true;
 }
 

@@ -1,0 +1,6 @@
+{
+  "name": "Atomschach",
+  "description": "Jeder Schlagzug explodiert: Alle Figuren außer Bauern auf den Nachbarfeldern verschwinden. Wessen König explodiert, verliert. Zeigt, wie ein Plugin das Brett nach jedem Zug verändert.",
+  "author": "ChessEngine",
+  "version": "1.0"
+}

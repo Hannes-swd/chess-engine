@@ -28,6 +28,7 @@ add_library(chess_core STATIC
     src/core/pgn.cpp
     src/core/clock.cpp
     src/core/tactics.cpp
+    src/core/openings.cpp
 )
 target_include_directories(chess_core PUBLIC src)
 chess_warnings(chess_core)
@@ -44,17 +45,31 @@ add_library(chess_engine STATIC
     src/engine/uci_engine.cpp
     src/engine/bot.cpp
     src/engine/rating.cpp
+    src/engine/training.cpp
     src/analysis/analysis.cpp
     src/app/environment.cpp
 )
 target_link_libraries(chess_engine PUBLIC chess_core)
 chess_warnings(chess_engine)
 
+# ---------------------------------------------------------------------------
+# Lua 5.4 (fuer Plugins) und die Plugin-Schicht
+# ---------------------------------------------------------------------------
+file(GLOB LUA_SOURCES ${CMAKE_SOURCE_DIR}/third_party/lua/src/*.c)
+list(REMOVE_ITEM LUA_SOURCES ${CMAKE_SOURCE_DIR}/third_party/lua/src/lua.c ${CMAKE_SOURCE_DIR}/third_party/lua/src/luac.c)
+add_library(lua STATIC ${LUA_SOURCES})
+target_include_directories(lua PUBLIC third_party/lua/src)
+set_target_properties(lua PROPERTIES LINKER_LANGUAGE C)
+
+add_library(chess_plugins STATIC src/plugins/lua_plugin.cpp)
+target_link_libraries(chess_plugins PUBLIC chess_engine lua)
+chess_warnings(chess_plugins)
 # Konsolen-Version
 add_executable(chessengine_cli src/app/main.cpp)
 target_link_libraries(chessengine_cli PRIVATE chess_engine)
 chess_warnings(chessengine_cli)
 add_custom_command(TARGET chessengine_cli POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:chessengine_cli>/bots
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/bots $<TARGET_FILE_DIR:chessengine_cli>/bots)
 
 # Die eingebaute Engine als UCI-Programm (fuer andere GUIs und fuer Tests)
@@ -94,12 +109,21 @@ if(CHESS_BUILD_GUI)
         src/ui/gui_app.cpp
         src/ui/layout.cpp
         src/ui/analysis_panel.cpp
+        src/ui/games_panel.cpp
+        src/ui/sound.cpp
+        src/ui/training_panel.cpp
+        src/ui/stats_panel.cpp
+        src/ui/plugins_panel.cpp
+        src/ui/feel.cpp
     )
-    target_link_libraries(chessengine_gui PRIVATE chess_engine imgui SDL2::SDL2main SDL2::SDL2-static)
+    target_link_libraries(chessengine_gui PRIVATE chess_plugins imgui SDL2::SDL2main SDL2::SDL2-static)
     chess_warnings(chessengine_gui)
     add_custom_command(TARGET chessengine_gui POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:chessengine_gui>/bots
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/bots $<TARGET_FILE_DIR:chessengine_gui>/bots
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:chessengine_gui>/assets)
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:chessengine_gui>/assets
+        COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:chessengine_gui>/plugins
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/plugins $<TARGET_FILE_DIR:chessengine_gui>/plugins)
 
     # Brett-Bedienung headless testen (simulierte Maus, kein Fenster)
     add_executable(chess_ui_tests
@@ -130,11 +154,36 @@ add_executable(chess_tests
     tests/uci_tests.cpp
     tests/clock_tests.cpp
     tests/rating_tests.cpp
+    tests/plugin_tests.cpp
+    tests/training_tests.cpp
+    tests/zz_gen_mates.cpp
 )
-target_link_libraries(chess_tests PRIVATE chess_engine)
+target_link_libraries(chess_tests PRIVATE chess_plugins)
 chess_warnings(chess_tests)
 target_compile_definitions(chess_tests PRIVATE
     CHESS_UCI_EXE="$<TARGET_FILE:chessengine_uci>"
-    CHESS_BOTS_DIR="${CMAKE_SOURCE_DIR}/bots")
+    CHESS_BOTS_DIR="${CMAKE_SOURCE_DIR}/bots"
+    CHESS_PLUGINS_DIR="${CMAKE_SOURCE_DIR}/plugins")
 add_dependencies(chess_tests chessengine_uci)
 add_test(NAME chess_tests COMMAND chess_tests)
+
+# ---------------------------------------------------------------------------
+# Weitergeben: "cmake --build build --config Release --target package" erzeugt ein ZIP
+# mit Programm, Bots, Plugins, Schriften und Anleitung. Stockfish (GPL) ist nicht enthalten.
+# ---------------------------------------------------------------------------
+if(CHESS_BUILD_GUI)
+    install(TARGETS chessengine_gui chessengine_cli chessengine_uci RUNTIME DESTINATION .)
+    install(DIRECTORY bots assets plugins DESTINATION .)
+    install(FILES README.md LICENSE THIRD_PARTY.md DESTINATION .)
+    install(FILES docs/PLUGINS.md DESTINATION docs)
+    install(FILES third_party/lua/LICENSE DESTINATION licenses RENAME Lua.txt)
+    install(FILES third_party/imgui/LICENSE.txt DESTINATION licenses RENAME DearImGui.txt)
+    install(FILES third_party/SDL2/LICENSE.txt DESTINATION licenses RENAME SDL2.txt)
+    install(FILES packaging/engines-LIESMICH.txt DESTINATION engines RENAME LIESMICH.txt)
+    set(CPACK_GENERATOR ZIP)
+    set(CPACK_PACKAGE_NAME ChessEngine)
+    set(CPACK_PACKAGE_VERSION 1.0.0)
+    set(CPACK_PACKAGE_FILE_NAME "ChessEngine-${CPACK_PACKAGE_VERSION}-win64")
+    set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+    include(CPack)
+endif()

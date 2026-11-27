@@ -1,0 +1,7 @@
+{
+  "name": "Zufallsaufstellung",
+  "description": "Die Figuren der Grundreihe werden zufällig gemischt (wie Schach960: Läufer auf verschiedenen Farben, König zwischen den Türmen). Ohne Rochade.",
+  "author": "ChessEngine",
+  "version": "1.0",
+  "priority": 5
+}

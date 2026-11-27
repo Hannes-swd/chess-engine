@@ -305,11 +305,46 @@ std::optional<Move> BoardView::draw(const Position& pos, const std::vector<Move>
         }
     }
 
+    // Vorgemerkter Zug (blau) und Trainings-Rueckmeldung (gruen/rot)
+    if (ov.premove && ov.premove->valid() && ov.premove->to < pos.squareCount()) {
+        tint(ov.premove->from, BoardView::annotationColor(2) * ImVec4(1, 1, 1, 0.45f));
+        tint(ov.premove->to, BoardView::annotationColor(2) * ImVec4(1, 1, 1, 0.45f));
+    }
+    if (ov.flashMove && ov.flashMove->valid() && ov.flashMove->to < pos.squareCount()) {
+        const ImVec4 col = ov.flashGood ? c.qBest : c.qBlunder;
+        tint(ov.flashMove->from, ImVec4(col.x, col.y, col.z, 0.35f));
+        tint(ov.flashMove->to, ImVec4(col.x, col.y, col.z, 0.5f));
+    }
+
     // --- Figuren -----------------------------------------------------------------
+    // Animation: die gezogene Figur (und bei der Rochade der Turm) gleitet zum Zielfeld
+    constexpr double kAnimSeconds = 0.16;
+    float animT = 1.0f;
+    if (anim_) {
+        const double t = (ImGui::GetTime() - animStart_) / kAnimSeconds;
+        const bool fits = anim_->from < pos.squareCount() && anim_->to < pos.squareCount() && !pos.at(anim_->to).empty();
+        if (t >= 1.0 || !fits || dragVisible)
+            anim_.reset();
+        else
+            animT = static_cast<float>(1.0 - (1.0 - t) * (1.0 - t));  // abbremsen
+    }
+    auto animated = [&](Square s) {
+        return anim_ && (s == anim_->to || (anim_->rookTo != NoSquare && s == anim_->rookTo));
+    };
     for (Square s = 0; s < pos.squareCount(); ++s) {
         const Piece& p = pos.at(s);
-        if (p.empty() || (dragVisible && s == dragFrom_)) continue;
+        if (p.empty() || (dragVisible && s == dragFrom_) || animated(s)) continue;
         drawPiece(dl, theme, pos.registry().get(p.type), p.color, squareCenter(pos, s), cell_);
+    }
+    if (anim_) {
+        auto glide = [&](Square from, Square to) {
+            if (from == NoSquare || to == NoSquare || pos.at(to).empty()) return;
+            const ImVec2 a = squareCenter(pos, from), b = squareCenter(pos, to);
+            const Piece& p = pos.at(to);
+            drawPiece(dl, theme, pos.registry().get(p.type), p.color, a + (b - a) * animT, cell_);
+        };
+        if (anim_->rookTo != NoSquare) glide(anim_->rookFrom, anim_->rookTo);
+        glide(anim_->from, anim_->to);
     }
 
     // Wohin kann die ausgewaehlte Figur? Punkte fuer leere Felder, Ringe fuer Schlagzuege,

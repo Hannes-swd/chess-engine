@@ -1,0 +1,6 @@
+{
+  "name": "Königshügel",
+  "description": "Zusätzliche Siegbedingung: Wer seinen König auf eines der vier Mittelfelder (d4, e4, d5, e5) bringt, gewinnt sofort.",
+  "author": "ChessEngine",
+  "version": "1.0"
+}

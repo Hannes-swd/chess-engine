@@ -1,0 +1,10 @@
+{
+  "name": "Hobbyspieler",
+  "description": "Spielt gern und schnell. Sieht einfache Schläge, verliert aber bei Zwei-Zug-Taktiken den Überblick.",
+  "engine": "auto",
+  "strength": 1000,
+  "movetimeMs": 300,
+  "aggression": 0.1,
+  "pressureBlunder": 0.4,
+  "tempo": { "mode": "human", "minMs": 1000, "maxMs": 6000, "variance": 0.55 }
+}

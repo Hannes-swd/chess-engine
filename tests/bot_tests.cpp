@@ -4,6 +4,7 @@
 #include "core/notation.hpp"
 #include "engine/bot.hpp"
 #include "engine/builtin_engine.hpp"
+#include "engine/rating.hpp"
 
 using namespace chess;
 
@@ -16,13 +17,15 @@ public:
     std::string best;
     int lastSkill = -1, lastElo = -1;
 
+    SearchLimits lastLimits;
     std::string name() const override { return "Fake"; }
     bool supportsPosition(const Position&) const override { return true; }
     void configureStrength(int skill, int elo) override {
         lastSkill = skill;
         lastElo = elo;
     }
-    SearchResult search(const Position& pos, const SearchLimits&) override {
+    SearchResult search(const Position& pos, const SearchLimits& limits) override {
+        lastLimits = limits;
         SearchResult r;
         r.ok = true;
         Position p = pos;
@@ -222,6 +225,70 @@ TEST_CASE(bot_profile_json_roundtrip) {
     CHECK_EQ(back->weights.capture, 55.0);
 
     CHECK(!parseBotProfile(*json::parse(R"({"name":"X","tempo":{"mode":"langsam"}})"), err));
+}
+
+TEST_CASE(strength_model_scales_with_elo) {
+    int lastDepth = 0;
+    double lastTemp = 1e9, lastBlunder = 1.0;
+    for (int elo : {400, 600, 1000, 1400, 1800, 2200, 2600, 3000}) {
+        const StrengthModel m = strengthModel(elo);
+        CHECK(m.depth >= lastDepth);
+        CHECK(m.temperature < lastTemp);
+        CHECK(m.blunder < lastBlunder);
+        lastDepth = m.depth;
+        lastTemp = m.temperature;
+        lastBlunder = m.blunder;
+    }
+    CHECK_EQ(strengthModel(600).depth, 1);   // Einsteiger: nur den naechsten Zug
+    CHECK(strengthModel(1500).depth <= 4);   // Vereinsspieler: wenige Zuege
+    CHECK(strengthModel(3000).depth >= 12);  // Meister: tief
+}
+
+TEST_CASE(human_bot_strength_shows_in_move_choice) {
+    // Acht Kandidaten mit klar abgestufter Bewertung
+    FakeEngine e;
+    e.lines = {{"e4", 0}, {"d4", -40}, {"Nf3", -90}, {"c4", -160}, {"g3", -250}, {"b3", -350}, {"a3", -450},
+               {"h3", -600}};
+    Game g;
+
+    auto run = [&](int elo, double& avgLoss) {
+        BotProfile p = defaultBotProfile();
+        p.strength = elo;
+        Bot bot(p, 1234);
+        int best = 0, loss = 0;
+        const int trials = 400;
+        for (int i = 0; i < trials; ++i) {
+            const auto c = bot.choose(g, e);
+            Position tmp = g.position();
+            const std::string san = toSan(tmp, c.move);
+            if (san == "e4") ++best;
+            for (const auto& [s, cp] : e.lines)
+                if (s == san) loss -= cp;
+        }
+        avgLoss = static_cast<double>(loss) / trials;
+        return static_cast<double>(best) / trials;
+    };
+
+    double lossWeak = 0, lossStrong = 0;
+    const double bestWeak = run(600, lossWeak);
+    CHECK_EQ(e.lastLimits.depth, 1);  // 600er rechnet nur einen Halbzug
+    const double bestStrong = run(2400, lossStrong);
+    CHECK(e.lastLimits.depth >= 12);
+
+    CHECK(bestWeak < 0.6);     // Einsteiger findet den besten Zug oft nicht
+    CHECK(bestStrong > 0.9);   // Experte fast immer
+    CHECK(lossWeak > 4 * lossStrong + 20);
+    if (!(bestWeak < 0.6 && bestStrong > 0.9))
+        std::cerr << "  bester Zug: 600 -> " << bestWeak << ", 2400 -> " << bestStrong << "; Verlust " << lossWeak
+                  << " / " << lossStrong << "\n";
+}
+
+TEST_CASE(human_bot_elo_estimate) {
+    BotProfile p = defaultBotProfile();
+    p.strength = 1000;
+    CHECK_EQ(estimatedBotElo(p, true), 1000);
+    p.strength = 2200;
+    CHECK(estimatedBotElo(p, false) < 2200);  // ohne Stockfish schwaecher
 }
 
 TEST_CASE(bot_profiles_load_from_folder) {

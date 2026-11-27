@@ -22,6 +22,11 @@ std::string decimal(double v, int digits = 1) {
     return s;
 }
 
+ImVec4 alpha(ImVec4 c, float a) {
+    c.w = a;
+    return c;
+}
+
 constexpr MoveQuality kOrder[] = {MoveQuality::Brilliant,  MoveQuality::Great,   MoveQuality::Best,
                                   MoveQuality::Excellent,  MoveQuality::Good,    MoveQuality::Inaccuracy,
                                   MoveQuality::Mistake,    MoveQuality::Miss,    MoveQuality::Blunder,
@@ -142,7 +147,7 @@ void GuiApp::drawEvalGraph(float height) {
         const float mx = ImGui::GetIO().MousePos.x;
         const int k = std::clamp(static_cast<int>(std::lround((mx - p0.x) / width * (points - 1))), 0, points - 1);
         dl->AddLine(ImVec2(xAt(k), p0.y), ImVec2(xAt(k), p1.y), Theme::u32(c.textMuted, 0.7f), 1.0f * s);
-        std::string tip = k == 0 ? std::string("Startstellung") : moveLabel(k - 1);
+        std::string tip = k == 0 ? std::string("Startstellung") : figurine(moveLabel(k - 1));
         tip += "\n" + a.whiteEvals[static_cast<size_t>(k)].toString();
         if (k > 0 && k - 1 < static_cast<int>(a.moves.size()))
             tip += "   " + qualityName(a.moves[static_cast<size_t>(k - 1)].quality);
@@ -251,20 +256,27 @@ void GuiApp::tabAnalysis() {
         dl->AddRectFilled(ImVec2(b0.x + ww, b0.y), ImVec2(b0.x + ww + eq, b0.y + bh), Theme::u32(c.textMuted, 0.6f));
         dl->AddRect(b0, ImVec2(b0.x + w, b0.y + bh), Theme::u32(c.border), 5 * s);
         ImGui::Dummy(ImVec2(w, bh + 4 * s));
-        // Beschriftung: links Weiss, Mitte ausgeglichen, rechts Schwarz – jeweils an ihrem Ende ausgerichtet
-        const std::string lw = playerName(Color::White) + " vorn " + decimal(a.whiteBetter, 0) + " %";
-        const std::string lm = "ausgeglichen " + decimal(a.balanced, 0) + " %";
-        const std::string lb = playerName(Color::Black) + " vorn " + decimal(a.blackBetter, 0) + " %";
-        const float y = ImGui::GetCursorScreenPos().y;
-        const ImU32 muted = Theme::u32(c.textMuted);
+        // Drei Werte nebeneinander: Zahl gross, Bedeutung klein darunter
+        const std::string vals[3] = {decimal(a.whiteBetter, 0) + " %", decimal(a.balanced, 0) + " %",
+                                     decimal(a.blackBetter, 0) + " %"};
+        const std::string labels[3] = {playerName(Color::White) + " vorn", "ausgeglichen",
+                                       playerName(Color::Black) + " vorn"};
+        const float y = ImGui::GetCursorScreenPos().y + 2 * s;
+        ImFont* hf = theme_.heading ? theme_.heading : ImGui::GetFont();
         ImFont* f = ImGui::GetFont();
-        const float fs = ImGui::GetFontSize();
-        dl->AddText(f, fs, ImVec2(b0.x, y), muted, lw.c_str());
-        const float mw = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, lm.c_str()).x;
-        const float bw = f->CalcTextSizeA(fs, FLT_MAX, 0.0f, lb.c_str()).x;
-        dl->AddText(f, fs, ImVec2(b0.x + w - bw, y + ImGui::GetTextLineHeight()), muted, lb.c_str());
-        dl->AddText(f, fs, ImVec2(b0.x + (w - mw) * 0.5f, y), muted, lm.c_str());
-        ImGui::Dummy(ImVec2(w, 2 * ImGui::GetTextLineHeight()));
+        for (int k = 0; k < 3; ++k) {
+            const float vw = hf->CalcTextSizeA(19 * s, FLT_MAX, 0.0f, vals[k].c_str()).x;
+            const float lw = f->CalcTextSizeA(14 * s, FLT_MAX, 0.0f, labels[k].c_str()).x;
+            // links, Mitte, rechts buendig
+            const float colW = std::max(vw, lw);
+            const float x = k == 0 ? b0.x : k == 1 ? b0.x + (w - colW) * 0.5f : b0.x + w - colW;
+            const float ax = k == 0 ? 0.0f : k == 1 ? 0.5f : 1.0f;
+            dl->AddText(hf, 19 * s, ImVec2(x + (colW - vw) * ax, y), Theme::u32(c.text), vals[k].c_str());
+            dl->PushClipRect(ImVec2(b0.x, y), ImVec2(b0.x + w, y + 60 * s), true);
+            dl->AddText(f, 14 * s, ImVec2(x + (colW - lw) * ax, y + 22 * s), Theme::u32(c.textMuted), labels[k].c_str());
+            dl->PopClipRect();
+        }
+        ImGui::Dummy(ImVec2(w, 44 * s));
     }
     ImGui::Dummy(ImVec2(0, 4 * s));
 
@@ -277,14 +289,18 @@ void GuiApp::tabAnalysis() {
         theme_.qualityBadge(dl, r->quality, ImVec2(cp.x + rad, cp.y + rad), rad);
         ImGui::SetCursorScreenPos(ImVec2(cp.x + 2 * rad + 10 * s, cp.y + 2 * s));
         ImGui::PushFont(theme_.heading, 21.0f);
-        ImGui::TextColored(theme_.quality(r->quality), "%s", r->headline.c_str());
+        // Zug im Titel mit Figurensymbol, wie in der Zugliste
+        std::string headline = r->headline;
+        if (const size_t at = headline.find(r->san); !r->san.empty() && at != std::string::npos)
+            headline.replace(at, r->san.size(), figurine(r->san));
+        ImGui::TextColored(theme_.quality(r->quality), "%s", headline.c_str());
         ImGui::PopFont();
         ImGui::SetCursorScreenPos(ImVec2(cp.x, cp.y + 2 * rad + 8 * s));
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + w);
         ImGui::TextUnformatted(r->explanation.c_str());
         ImGui::PopTextWrapPos();
         const Score white = r->mover == Color::White ? r->playedScore : r->playedScore.negated();
-        ImGui::TextDisabled("%s   Bewertung danach %s   Genauigkeit %s %%", moveLabel(idx).c_str(),
+        ImGui::TextDisabled("%s   Bewertung danach %s   Genauigkeit %s %%", figurine(moveLabel(idx)).c_str(),
                             white.toString().c_str(), decimal(r->accuracy, 0).c_str());
 
         // Aktionen: Variante auf dem Brett durchspielen
@@ -292,14 +308,14 @@ void GuiApp::tabAnalysis() {
                              r->quality == MoveQuality::Great || r->quality == MoveQuality::Forced;
         if (!wasBest && !r->bestLine.empty()) {
             if (primaryButton((std::string(icon::replay) + "  Besseren Zug zeigen").c_str()))
-                startPreview(game_.positionAt(idx), r->bestLine, "Besser war " + r->bestSan);
+                startPreview(game_.positionAt(idx), r->bestLine, "Besser war " + figurine(r->bestSan));
             ImGui::SameLine();
         }
         if (!r->threatLine.empty()) {
             const char* label = wasBest ? "Fortsetzung zeigen" : "Antwort des Gegners";
             if (ImGui::Button((std::string(wasBest ? icon::forward : icon::threat) + "  " + label).c_str()))
                 startPreview(game_.positionAt(idx + 1), r->threatLine,
-                             wasBest ? "Fortsetzung nach " + r->san : "Antwort auf " + r->san);
+                             wasBest ? "Fortsetzung nach " + figurine(r->san) : "Antwort auf " + figurine(r->san));
         }
     } else {
         ImGui::TextDisabled("Klick in die Kurve oder blättere mit ← → durch die Züge.");
@@ -313,14 +329,19 @@ void GuiApp::tabAnalysis() {
             return -1;
         };
         const int prevErr = findError(idx, -1), nextErr = findError(idx, +1);
-        const float w4 = (ImGui::GetContentRegionAvail().x - 3 * ImGui::GetStyle().ItemSpacing.x) / 4;
-        ImGui::PushStyleColor(ImGuiCol_Button, c.surfaceRaised);
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        const float w = ImGui::GetContentRegionAvail().x;
+        const float bh = 22.0f * s + 2 * ImGui::GetStyle().FramePadding.y;
+        const ImVec2 n0 = ImGui::GetCursorScreenPos();
+        dl->AddRectFilled(n0, ImVec2(n0.x + w, n0.y + bh), Theme::u32(c.surfaceRaised), 8 * s);
+        const float w4 = w / 4;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
         if (iconButton("##aprevErr", icon::skipPrev, "Vorheriger Fehler", false, w4, prevErr >= 0)) setView(prevErr + 1);
-        ImGui::SameLine();
+        ImGui::SameLine(0, 0);
         if (iconButton("##aprev", icon::prev, "Zug zurück (←)", false, w4, viewPly() > 0)) setView(viewPly() - 1);
-        ImGui::SameLine();
+        ImGui::SameLine(0, 0);
         if (iconButton("##anext", icon::next, "Zug vor (→)", false, w4, viewPly() < n)) setView(viewPly() + 1);
-        ImGui::SameLine();
+        ImGui::SameLine(0, 0);
         if (iconButton("##anextErr", icon::skipNext, "Nächster Fehler", false, w4, nextErr >= 0)) setView(nextErr + 1);
         ImGui::PopStyleColor();
     }
@@ -331,6 +352,22 @@ void GuiApp::tabAnalysis() {
         ImGui::TableSetupColumn("Kategorie", ImGuiTableColumnFlags_WidthStretch, 3.0f);
         ImGui::TableSetupColumn("W", ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableSetupColumn("S", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        auto centered = [&](const char* text, ImVec4 col) {
+            const float cw = ImGui::GetContentRegionAvail().x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cw - ImGui::CalcTextSize(text).x) * 0.5f);
+            ImGui::TextColored(col, "%s", text);
+        };
+        ImGui::TableNextRow();
+        for (int col = 0; col < 2; ++col) {
+            ImGui::TableSetColumnIndex(1 + col);
+            const ImVec2 hp = ImGui::GetCursorScreenPos();
+            const float cw = ImGui::GetContentRegionAvail().x;
+            const ImVec2 disc(hp.x + cw * 0.5f, hp.y + ImGui::GetTextLineHeight() * 0.5f);
+            dl->AddCircleFilled(disc, 7 * s, Theme::u32(col == 0 ? c.whiteFill : c.blackFill));
+            dl->AddCircle(disc, 7 * s, Theme::u32(c.border), 0, 1.0f * s);
+            ImGui::Dummy(ImVec2(cw, ImGui::GetTextLineHeight()));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", playerName(col == 0 ? Color::White : Color::Black).c_str());
+        }
         for (MoveQuality q : kOrder) {
             const int w = a.white.counts[static_cast<size_t>(q)];
             const int b = a.black.counts[static_cast<size_t>(q)];
@@ -347,17 +384,24 @@ void GuiApp::tabAnalysis() {
             for (int col = 0; col < 2; ++col) {
                 ImGui::TableSetColumnIndex(1 + col);
                 const int v = col == 0 ? w : b;
-                if (v == 0)
-                    ImGui::TextDisabled("0");
-                else
-                    ImGui::TextColored(theme_.quality(q), "%d", v);
+                const std::string num = std::to_string(v);
+                centered(num.c_str(), v == 0 ? alpha(c.textMuted, 0.5f) : theme_.quality(q));
             }
         }
         ImGui::EndTable();
     }
 
     ImGui::Dummy(ImVec2(0, 6 * s));
-    if (ImGui::CollapsingHeader("Neu analysieren")) runControls();
+    sectionTitle("Neu analysieren");
+    {
+        const float btnW = ImGui::CalcTextSize("Starten").x + 52 * s;
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - btnW - ImGui::GetStyle().ItemSpacing.x);
+        ImGui::SliderInt("##depth2", &analysisDepth_, 4, 24, "Suchtiefe %d");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(engineBusy());
+        if (ImGui::Button((std::string(icon::refresh) + "  Starten").c_str(), ImVec2(-FLT_MIN, 0))) startAnalysis();
+        ImGui::EndDisabled();
+    }
     ImGui::EndChild();
 }
 

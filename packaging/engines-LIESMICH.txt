@@ -1,0 +1,10 @@
+Stockfish hierher legen
+=======================
+
+ChessEngine spielt und analysiert mit Stockfish deutlich stärker als mit der eingebauten Engine.
+Stockfish ist kostenlos (GPL-3.0) und wird separat heruntergeladen:
+
+  1. https://stockfishchess.org/download/ öffnen, Windows-Version laden
+  2. ZIP entpacken
+  3. Die .exe in diesen Ordner legen und in stockfish.exe umbenennen
+  4. ChessEngine neu starten oder unter Einstellungen > Engine auf 'Erneut suchen' klicken

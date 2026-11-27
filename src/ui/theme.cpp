@@ -128,17 +128,34 @@ void Theme::loadFonts(const std::string& iconFont) {
         return io.Fonts->AddFontFromFileTTF(file, size, &cfg);
     };
 
-    body = ui ? add(ui, 18.0f, 1.25f) : io.Fonts->AddFontDefault();
-    mergeIcons(18.0f);
-    if (ui && symbols) {
+    // Figurensymbole (♞, ♛ …) in jede Schrift, damit "♞c3" auch in Ueberschriften lesbar ist
+    auto mergeSymbols = [&](float size) {
+        if (!symbols) return;
+        // Figuren etwas groesser als der Rest, sonst wirken sie neben Buchstaben winzig
+        static const ImWchar chessRange[] = {0x2654, 0x265F, 0};
+        ImFontConfig pieces;
+        pieces.MergeMode = true;
+        pieces.GlyphRanges = chessRange;
+        pieces.GlyphOffset = ImVec2(0, size * 0.06f);
+        io.Fonts->AddFontFromFileTTF(symbols, size * 1.3f, &pieces);
         ImFontConfig merge;
         merge.MergeMode = true;
-        io.Fonts->AddFontFromFileTTF(symbols, 18.0f, &merge);
-    }
+        io.Fonts->AddFontFromFileTTF(symbols, size, &merge);
+    };
+
+    body = ui ? add(ui, 18.0f, 1.25f) : io.Fonts->AddFontDefault();
+    mergeIcons(18.0f);
+    if (ui) mergeSymbols(18.0f);
     strong = semibold ? add(semibold, 18.0f, 1.15f) : body;
-    if (semibold) mergeIcons(18.0f);
+    if (semibold) {
+        mergeIcons(18.0f);
+        mergeSymbols(18.0f);
+    }
     heading = din ? add(din, 22.0f, 1.1f) : strong;
-    if (din) mergeIcons(22.0f);
+    if (din) {
+        mergeIcons(22.0f);
+        mergeSymbols(22.0f);
+    }
     pieces = symbols ? io.Fonts->AddFontFromFileTTF(symbols, 64.0f) : nullptr;
     io.FontDefault = body;
 }
@@ -316,4 +333,32 @@ void Theme::qualityBadge(ImDrawList* dl, MoveQuality q, ImVec2 center, float rad
     }
 }
 
+// ---------------------------------------------------------------------------
+// Brett-Designs
+// ---------------------------------------------------------------------------
+
+const std::vector<Theme::BoardTheme>& Theme::boardThemes() {
+    static const std::vector<BoardTheme> list = {
+        {"Salbei", hex(0xDCD3C2), hex(0x7A8A82)},
+        {"Walnuss", hex(0xE8D6B8), hex(0x9C7556)},
+        {"Schiefer", hex(0xDDE2E4), hex(0x7F95A1)},
+        {"Marmor", hex(0xE4E1DA), hex(0x99948B)},
+        {"Moos", hex(0xDFE3CB), hex(0x80906A)},
+        {"Ton", hex(0xEEDDD0), hex(0xB4826F)},
+    };
+    return list;
+}
+
+void Theme::setBoard(int index) {
+    const auto& list = boardThemes();
+    const BoardTheme& b = list[static_cast<size_t>(std::clamp(index, 0, static_cast<int>(list.size()) - 1))];
+    for (Palette* p : {&darkPalette_, &lightPalette_}) {
+        p->boardLight = b.light;
+        p->boardDark = b.dark;
+        // Koordinaten in der jeweils anderen Brettfarbe, etwas abgedunkelt bzw. aufgehellt
+        p->coordOnLight = ImVec4(b.dark.x * 0.85f, b.dark.y * 0.85f, b.dark.z * 0.85f, 1.0f);
+        p->coordOnDark = ImVec4(std::min(1.0f, b.light.x * 1.03f), std::min(1.0f, b.light.y * 1.03f),
+                                std::min(1.0f, b.light.z * 1.03f), 1.0f);
+    }
+}
 }  // namespace chess::ui

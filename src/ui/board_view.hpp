@@ -28,6 +28,11 @@ struct BoardOverlay {
     // Bewertungs-Abzeichen (Analyse) in der Ecke eines Feldes
     Square badgeSquare = NoSquare;
     MoveQuality badgeQuality = MoveQuality::Best;
+    // Vorgemerkter Zug (Premove): beide Felder blau getoent
+    std::optional<Move> premove;
+    // Gesuchter Zug im Training: richtig (gruen) oder falsch (rot) kurz aufleuchten lassen
+    std::optional<Move> flashMove;
+    bool flashGood = true;
 };
 
 // Eigene Markierung des Spielers (Rechtsklick): Pfeil von -> nach, oder Kreis (to == NoSquare).
@@ -49,6 +54,10 @@ public:
                              const BoardOverlay& overlay, const Theme& theme, ImVec2 origin, ImVec2 avail);
 
     void cancel();
+
+    // Figur gleitet von from nach to (ab jetzt, ~0,16 s). Ohne Aufruf springen Figuren wie bisher.
+    void animate(const Move& m) { anim_ = m; animStart_ = ImGui::GetTime(); }
+    bool animating() const { return anim_.has_value(); }
 
     const std::vector<Annotation>& annotations() const { return annotations_; }
     void clearAnnotations() { annotations_.clear(); }
@@ -83,6 +92,8 @@ private:
     std::vector<Move> promotionChoices_;
 
     std::vector<Annotation> annotations_;
+    std::optional<Move> anim_;
+    double animStart_ = 0;
     Square rightFrom_ = NoSquare;
     bool rightDragging_ = false;
 };

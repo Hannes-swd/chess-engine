@@ -3,6 +3,7 @@
 #include "engine/bot.hpp"
 
 #include <string>
+#include <vector>
 
 namespace chess {
 
@@ -16,6 +17,13 @@ struct PlayerProfile {
     int draws = 0;
     int losses = 0;
     int lastDelta = 0;
+    // Verlauf fuer die Elo-Kurve: ein Punkt pro gewerteter Partie
+    struct Point {
+        std::string date;  // "2026-11-26_1855"
+        int rating = 0;
+        std::string opponent;
+    };
+    std::vector<Point> history;
 };
 
 // Erwartete Punktzahl (0..1) von a gegen b, FIDE-Formel.
@@ -26,6 +34,8 @@ int eloDelta(int rating, int opponent, double score, int gamesPlayed);
 
 // Wertet die Partie und aktualisiert das Profil. Gibt die Aenderung zurueck.
 int applyResult(PlayerProfile& p, int opponentElo, double score);
+// Wie applyResult, haengt zusaetzlich einen Punkt an den Verlauf an.
+int applyResult(PlayerProfile& p, int opponentElo, double score, const std::string& date, const std::string& opponent);
 
 // Grobe Schaetzung, wie stark ein Bot-Profil spielt (fuer Anzeige und Wertung).
 // Mit Stockfish: Elo-Begrenzung bzw. Stufe; ohne: eingebaute Engine (~1100).

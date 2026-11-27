@@ -1,0 +1,10 @@
+{
+  "name": "Experte",
+  "description": "Turnierspieler mit guter Taktik. Fehler macht er selten – meist erst, wenn die Uhr knapp wird.",
+  "engine": "auto",
+  "strength": 2200,
+  "movetimeMs": 700,
+  "aggression": 0.1,
+  "pressureBlunder": 0.1,
+  "tempo": { "mode": "human", "minMs": 800, "maxMs": 6000, "variance": 0.4 }
+}

@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 int main(int argc, char** argv) {
     // Entwickler-Optionen: --screenshot <datei.bmp> [--moves "e4 e5 ..."] [--analyse] [--light]
@@ -23,7 +24,8 @@ int main(int argc, char** argv) {
     std::string demoMoves;
     bool demoAnalyse = false, light = false, dark = false;
     int tab = -1, view = -1, botProfile = -1;
-    std::string marks, select;
+    std::string marks, select, openFile, pluginList;
+    int drill = -2, boardTheme = -1;
     bool hint = false, editor = false, compact = false;
     int timePreset = -1, assists = -1, previewSteps = -1;
     for (int i = 1; i < argc; ++i) {
@@ -44,6 +46,10 @@ int main(int argc, char** argv) {
         else if (a == "--assist" && i + 1 < argc) assists = std::atoi(argv[++i]);
         else if (a == "--compact") compact = true;
         else if (a == "--preview" && i + 1 < argc) previewSteps = std::atoi(argv[++i]);
+        else if (a == "--open" && i + 1 < argc) openFile = argv[++i];
+        else if (a == "--plugins" && i + 1 < argc) pluginList = argv[++i];
+        else if (a == "--drill" && i + 1 < argc) drill = std::atoi(argv[++i]);
+        else if (a == "--board" && i + 1 < argc) boardTheme = std::atoi(argv[++i]);
     }
 
     SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
@@ -89,7 +95,8 @@ int main(int argc, char** argv) {
     ImGui_ImplSDLRenderer2_Init(renderer);
 
     {
-        chess::ui::GuiApp app(theme);
+        chess::ui::GuiApp app(theme, screenshot != nullptr);
+        if (screenshot) app.setSandbox(true);  // Testlaeufe duerfen nichts speichern (Elo, Partien, Einstellungen)
         if (light) app.overrideTheme(false);
         if (dark) app.overrideTheme(true);
         if (compact) app.requestSidebar(false);
@@ -99,7 +106,22 @@ int main(int argc, char** argv) {
         if (editor) app.requestEditorOpen();
         if (!demoMoves.empty() || demoAnalyse) app.demo(demoMoves, demoAnalyse);
         if (!marks.empty() || !select.empty() || hint) app.demoMarks(marks, select, hint);
+        if (boardTheme >= 0) app.requestBoardTheme(boardTheme);
+        if (!pluginList.empty()) {
+            std::vector<std::string> ids;
+            size_t start = 0;
+            while (start <= pluginList.size()) {
+                const size_t comma = pluginList.find(',', start);
+                const std::string id = pluginList.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+                if (!id.empty()) ids.push_back(id);
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+            app.requestPlugins(ids);
+        }
+        if (!openFile.empty()) app.requestOpen(openFile);
         if (tab >= 0) app.requestTab(tab);
+        if (drill > -2) app.requestDrill(drill);
         if (view >= 0) app.requestView(view);
         int frameCount = 0;
         bool running = true;

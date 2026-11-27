@@ -44,6 +44,10 @@ struct BotProfile {
     std::string description;
     EngineChoice engine = EngineChoice::Auto;
 
+    // Menschliches Staerke-Modell: Ziel-Elo 400..3000. Bestimmt Suchtiefe, wie oft ein schwaecherer
+    // Kandidat gewaehlt wird und wie oft der Bot patzt. 0 = stattdessen die Stockfish-Werte unten.
+    int strength = 0;
+
     int skill = 20;         // Stockfish "Skill Level" 0..20
     int elo = 0;            // > 0: Stockfish UCI_Elo (ab ca. 1320)
     int depth = 12;         // Suchtiefe (0 = egal)
@@ -59,6 +63,19 @@ struct BotProfile {
     Tempo tempo;
     double pressureBlunder = 0;  // 0..1: zusaetzliche Fehlerneigung, wenn weniger als 10 s auf der Uhr sind
 };
+
+// Wie ein Spieler mit einer bestimmten Elo "rechnet":
+//  - depth: so viele Halbzuege schaut er voraus (Taktiken dahinter sieht er nicht)
+//  - candidates: aus so vielen Zuegen waehlt er
+//  - temperature: wie stark er schwaechere Kandidaten in Betracht zieht (Centipawns; hoch = oft daneben)
+//  - blunder: Wahrscheinlichkeit fuer einen echten Aussetzer (ein beliebiger Zug)
+struct StrengthModel {
+    int depth = 1;
+    int candidates = 8;
+    double temperature = 100;
+    double blunder = 0;
+};
+StrengthModel strengthModel(int elo);
 
 BotProfile defaultBotProfile();
 std::optional<BotProfile> parseBotProfile(const json::Value& v, std::string& error);
@@ -91,6 +108,9 @@ public:
     int thinkDelayMs(const Game& game, const BotContext& ctx = {});
 
 private:
+    Choice chooseHuman(const Position& pos, const std::vector<Move>& legal, const std::vector<ScoredMove>& cands,
+                       const StrengthModel& model, const BotContext& ctx);
+
     BotProfile profile_;
     std::mt19937 rng_;
 };

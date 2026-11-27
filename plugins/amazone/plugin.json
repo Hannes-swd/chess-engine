@@ -1,0 +1,7 @@
+{
+  "name": "Amazone",
+  "description": "Die Dame wird zur Amazone: Sie zieht wie Dame und Springer zugleich.",
+  "author": "ChessEngine",
+  "version": "1.0",
+  "priority": 10
+}

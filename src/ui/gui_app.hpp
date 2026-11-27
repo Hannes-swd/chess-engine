@@ -3,12 +3,16 @@
 #include "analysis/analysis.hpp"
 #include "core/clock.hpp"
 #include "core/game.hpp"
+#include "core/pgn.hpp"
 #include "engine/bot.hpp"
 #include "engine/builtin_engine.hpp"
 #include "engine/rating.hpp"
+#include "engine/training.hpp"
 #include "engine/uci_engine.hpp"
 #include "ui/board_view.hpp"
+#include "plugins/lua_plugin.hpp"
 #include "ui/settings.hpp"
+#include "ui/sound.hpp"
 #include "ui/theme.hpp"
 
 #include <atomic>
@@ -23,7 +27,7 @@
 namespace chess::ui {
 
 // Bereiche der linken Navigation
-enum class Mode { Play, Analysis, Bots, Games, Settings };
+enum class Mode { Play, Analysis, Training, Bots, Games, Stats, Plugins, Settings };
 
 // Die komplette Oberflaeche:
 //   oben    Top-Leiste (Logo, Status, Elo, Bilanz, Engine, Design)
@@ -33,7 +37,8 @@ enum class Mode { Play, Analysis, Bots, Games, Settings };
 // Bot-Zuege und Analysen laufen in Hintergrund-Threads, damit nichts ruckelt.
 class GuiApp {
 public:
-    explicit GuiApp(Theme& theme);
+    // sandbox: Testmodus (Screenshots) – nichts auf die Platte schreiben, schon ab dem Start
+    explicit GuiApp(Theme& theme, bool sandbox = false);
     ~GuiApp();
     GuiApp(const GuiApp&) = delete;
     GuiApp& operator=(const GuiApp&) = delete;
@@ -44,10 +49,13 @@ public:
     void demo(const std::string& moves, bool analyse);
     // "e2e4" = Pfeil, "d5" = Kreis; optional ein Feld auswaehlen und einen Tipp anfordern.
     void demoMarks(const std::string& marks, const std::string& select, bool hint);
-    // 0 Spielen/Zuege, 1 Bots, 2 Analyse, 3 Partien, 4 Einstellungen, 5 Spielen/Neue Partie
+    // 0 Spielen/Zuege, 1 Bots, 2 Analyse, 3 Partien, 4 Einstellungen, 5 Spielen/Neue Partie,
+    // 6 Training/Aufgaben, 7 Statistik, 8 Plugins, 9 Training/Eroeffnungen
     void requestTab(int tab) {
-        static const Mode modes[] = {Mode::Play, Mode::Bots, Mode::Analysis, Mode::Games, Mode::Settings, Mode::Play};
-        if (tab < 0 || tab > 5) return;
+        static const Mode modes[] = {Mode::Play,     Mode::Bots,  Mode::Analysis, Mode::Games,    Mode::Settings,
+                                     Mode::Play,     Mode::Training, Mode::Stats, Mode::Plugins, Mode::Training};
+        if (tab < 0 || tab > 9) return;
+        trainTab_ = tab == 9 ? 1 : 0;
         mode_ = modes[tab];
         playTab_ = tab == 5 ? 0 : 1;
     }
@@ -59,8 +67,26 @@ public:
         startNewGame();
     }
     void requestEditorOpen() { mode_ = Mode::Bots; }
+    void requestOpen(const std::string& path) { openSavedGame(std::filesystem::path(path)); }
     void requestSidebar(bool expanded) { settings_.sidebarExpanded = expanded; }
+    void requestPlugins(const std::vector<std::string>& ids) {  // fuer Screenshots: Plugins aktivieren
+        settings_.plugins = ids;
+        startNewGame();
+    }
+    void requestDrill(int opening) {  // fuer Screenshots: Aufgabe (-1) oder Eroeffnung starten
+        mode_ = Mode::Training;
+        if (opening < 0) {
+            trainTab_ = 0;
+            startPuzzle();
+        } else {
+            trainTab_ = 1;
+            startOpeningDrill(static_cast<size_t>(opening));
+        }
+    }
+    void requestBoardTheme(int i) { settings_.boardTheme = i, applyTheme(); }
     void requestPreview(int steps) { requestedPreview_ = steps; }  // nach der Analyse: bessere Variante zeigen
+    // Testmodus (Screenshots): nichts auf die Platte schreiben – keine Partien, keine Elo, keine Einstellungen
+    void setSandbox(bool on) { sandbox_ = on; }
     // Fuer Screenshots: Design/Hilfen setzen, ohne die gespeicherten Einstellungen zu aendern
     void overrideTheme(bool dark) {
         settings_.darkTheme = dark;
@@ -119,6 +145,13 @@ private:
     bool iconButton(const char* id, const char* glyph, const char* tooltip, bool active = false, float width = 0,
                     bool enabled = true);
     bool navItem(const char* glyph, const char* label, bool active, float width);
+    // Bausteine fuer ein ruhiges, eigenes Erscheinungsbild (layout.cpp)
+    void sectionTitle(const char* text);
+    bool toggleRow(const char* label, bool* value, const char* help = nullptr, float indent = 0);
+    bool timeChip(const char* id, const char* big, const char* small, bool selected, ImVec2 size);
+    void drawBotAvatar(ImDrawList* dl, ImVec2 center, float radius, const BotProfile* profile) const;
+    bool botRow(const char* id, const BotProfile* profile, bool selected, bool showDescription);
+    std::string figurine(const std::string& san) const;
     bool iconTab(const char* glyph, const char* label, bool active, float width);
     // Analyse-Bericht (analysis_panel.cpp)
     void drawEvalGraph(float height);
@@ -132,12 +165,87 @@ private:
     // Panels mit bestehendem Inhalt
     void tabAnalysis();
     void tabExport();
+    // Gespeicherte Partien (games_panel.cpp)
+    void tabGames();
+    void scanSavedGames();
+    void openSavedGame(const std::filesystem::path& path);
+    bool openPgn(const std::string& text, const std::filesystem::path& path);  // zum Nachspielen, nie gewertet
     void tabSettings();
     void saveSettings();
     void applyTheme();
     bool card(const char* id, const std::string& title, const std::string& chip, const std::string& desc,
               bool selected);
     bool primaryButton(const char* label, ImVec2 size = ImVec2(0, 0));
+
+    // --- Plugins (plugins_panel.cpp) -----------------------------------------------
+    void reloadPlugins();
+    Variant currentVariant();  // Standardschach + aktive Plugins (fuer jede neue Partie neu gebaut)
+    void panelPlugins();
+    std::vector<plugins::PluginInfo> plugins_;
+    std::vector<std::string> pluginErrors_;
+    std::vector<std::shared_ptr<plugins::LuaPlugin>> gamePlugins_;  // Plugins der laufenden Partie (fuer das Log)
+    bool pluginGame_ = false;  // laufende Partie nutzt Plugins -> ungewertet
+
+    // --- Spielgefuehl ----------------------------------------------------------------
+    void playSounds(const Position& before, const Move& m);
+    void playSound(Sound::Kind kind);
+    void offerDraw();
+    void saveResume();  // laufende Partie beim Beenden merken
+    void loadResume();  // ... und beim naechsten Start anbieten
+    void resumeGame();
+    Sound sound_;
+    bool soundReady_ = false;
+    bool soundTried_ = false;
+    std::optional<Score> lastBotScore_;  // Bewertung des letzten Bot-Zuges aus Sicht des Bots
+    int endSoundGen_ = -1;
+    int lastTickSecond_ = -1;
+    std::optional<Move> premove_;
+    int drawOfferPly_ = -100;
+    std::string resumeText_;  // gespeicherte Partie (JSON), leer = nichts fortzusetzen
+    std::string resumeInfo_;
+
+    // --- Training (training_panel.cpp) --------------------------------------------------
+    struct Drill {
+        Position start{PieceRegistry::standard()};
+        Position current{PieceRegistry::standard()};
+        std::vector<Move> line;  // erwartete Zuege (Spieler und Gegner abwechselnd)
+        Color user = Color::White;
+        int index = 0;
+        int mistakes = 0;
+        bool done = false;
+        bool revealed = false;
+        std::string title, subtitle;
+        int puzzle = -1;      // Index in training_.puzzles
+        int opening = -1;     // Index in openings()
+        double replyAt = 0;   // Gegnerzug automatisch ab diesem Zeitpunkt
+        std::optional<Move> flash;
+        bool flashGood = true;
+        double flashUntil = 0;
+        std::string feedback;
+    };
+    void panelTraining();
+    void loadTraining();
+    void saveTraining();
+    void collectPuzzles();  // nach einer Analyse: eigene Fehler als Aufgaben
+    void startPuzzle();
+    void startOpeningDrill(size_t opening);
+    void drillMove(const Move& m);
+    void tickDrill();
+    void drawDrillBoard();
+    bool drillActive() const { return mode_ == Mode::Training && drill_.has_value(); }
+    TrainingData training_;
+    std::optional<Drill> drill_;
+    int trainTab_ = 0;
+    char openingFilter_[64] = {};
+    int collectedGen_ = -1;
+
+    // --- Statistik (stats_panel.cpp) ------------------------------------------------------
+    void panelStats();
+    void drawEloCurve(float height);
+
+    // --- Weiteres -----------------------------------------------------------------------
+    void createOwnBot();
+    void retryStockfish();
 
     // --- Hilfen ---------------------------------------------------------------
     const Position& viewedPosition() const;
@@ -169,6 +277,7 @@ private:
     std::optional<Preview> preview_;
     int autoAnalysedGen_ = -1;
     int requestedPreview_ = -1;
+    bool sandbox_ = false;
 
     // Elo-Wertung
     PlayerProfile player_;
@@ -232,6 +341,20 @@ private:
     bool zen_ = false;
     bool resultDismissed_ = false;
     int lastScrolledPly_ = -1;
+
+    // Gespeicherte Partien: Liste im Bereich Partien; eine geoeffnete Partie behaelt ihre Namen und Tags
+    struct SavedGame {
+        std::filesystem::path path;
+        std::string white, black, result, date, opening;
+        int moves = 0;
+        std::optional<double> accuracyYou;  // nur mit Bewertungen und wenn "Du" mitgespielt hat
+        std::array<int, kQualityCount> countsYou{};
+    };
+    char gamesFilter_[64] = {};
+    int gamesResultFilter_ = 0;  // 0 alle, 1 Siege, 2 Remis, 3 Niederlagen
+    std::vector<SavedGame> savedGames_;
+    double gamesScannedAt_ = -1000;
+    PgnTags loadedTags_;
 
     std::filesystem::path savePath_;
     int savedGen_ = -1;

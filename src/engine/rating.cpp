@@ -31,6 +31,15 @@ int applyResult(PlayerProfile& p, int opponentElo, double score) {
 
 int estimatedBotElo(const BotProfile& p, bool withStockfish) {
     double e;
+    if (p.strength > 0) {
+        // Menschliches Modell: Ziel-Elo, nur zusaetzliche Patzer/Zufall aus dem Profil ziehen ab.
+        // Ohne Stockfish ist die Bewertung der eingebauten Engine grober -> etwas schwaecher.
+        e = p.strength;
+        if (!withStockfish && p.strength > 1400) e = 1400 + (p.strength - 1400) * 0.4;
+        e -= 900.0 * p.blunderChance + 1.5 * p.randomness;
+        e = std::clamp(e, 400.0, 3200.0);
+        return static_cast<int>(std::lround(e / 10.0) * 10);
+    }
     if (withStockfish && p.engine != EngineChoice::Builtin)
         e = p.elo > 0 ? p.elo : 1300.0 + 85.0 * p.skill;
     else
@@ -40,6 +49,37 @@ int estimatedBotElo(const BotProfile& p, bool withStockfish) {
     if (p.candidates > 1) e -= std::max(0, p.window - 60) * 1.0;
     e = std::clamp(e, 400.0, 3200.0);
     return static_cast<int>(std::lround(e / 10.0) * 10);
+}
+
+namespace {
+
+std::string escaped(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        if (c == '"' || c == '\\') out += '\\';
+        if (static_cast<unsigned char>(c) >= 0x20) out += c;
+    }
+    return out;
+}
+
+std::string historyJson(const PlayerProfile& p) {
+    std::string out;
+    for (size_t i = 0; i < p.history.size(); ++i) {
+        const auto& h = p.history[i];
+        out += std::string(i ? ",\n    " : "\n    ") + "{\"date\": \"" + escaped(h.date) + "\", \"rating\": " +
+               std::to_string(h.rating) + ", \"opponent\": \"" + escaped(h.opponent) + "\"}";
+    }
+    return out + (p.history.empty() ? "" : "\n  ");
+}
+
+}  // namespace
+
+int applyResult(PlayerProfile& p, int opponentElo, double score, const std::string& date, const std::string& opponent) {
+    if (p.history.empty()) p.history.push_back({"", p.rating, ""});  // Startpunkt der Kurve
+    const int d = applyResult(p, opponentElo, score);
+    p.history.push_back({date, p.rating, opponent});
+    if (p.history.size() > 2000) p.history.erase(p.history.begin() + 1);
+    return d;
 }
 
 std::string playerProfileToJson(const PlayerProfile& p) {
@@ -52,7 +92,7 @@ std::string playerProfileToJson(const PlayerProfile& p) {
            ",\n  \"peak\": " + std::to_string(p.peak) + ",\n  \"games\": " + std::to_string(p.games) +
            ",\n  \"wins\": " + std::to_string(p.wins) + ",\n  \"draws\": " + std::to_string(p.draws) +
            ",\n  \"losses\": " + std::to_string(p.losses) + ",\n  \"lastDelta\": " + std::to_string(p.lastDelta) +
-           "\n}\n";
+           ",\n  \"history\": [" + historyJson(p) + "]\n}\n";
 }
 
 bool playerProfileFromJson(const std::string& text, PlayerProfile& p) {
@@ -67,6 +107,13 @@ bool playerProfileFromJson(const std::string& text, PlayerProfile& p) {
     num("draws", p.draws);
     num("losses", p.losses);
     num("lastDelta", p.lastDelta);
+    if (const json::Value* h = v->find("history"); h && h->isArray()) {
+        p.history.clear();
+        for (const json::Value& e : h->asArray())
+            if (e.isObject())
+                p.history.push_back({e.getString("date", ""), static_cast<int>(e.getNumber("rating", p.rating)),
+                                     e.getString("opponent", "")});
+    }
     return true;
 }
 

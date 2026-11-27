@@ -91,6 +91,22 @@ inline constexpr Icon skipNext{0xe044};
 inline constexpr Icon skipPrev{0xe045};
 inline constexpr Icon threat{0xe1b3};  // gps_fixed
 inline constexpr Icon chart{0xe6e1};   // show_chart
+
+// Neue Bereiche
+inline constexpr Icon training{0xe80c};  // school
+inline constexpr Icon stats{0xe26b};     // bar_chart
+inline constexpr Icon plugin{0xe87b};    // extension
+inline constexpr Icon book{0xea19};      // menu_book
+inline constexpr Icon draw{0xebcb};      // handshake
+inline constexpr Icon palette{0xe40a};
+inline constexpr Icon personAdd{0xe7fe};
+inline constexpr Icon openNew{0xe89e};
+inline constexpr Icon search{0xe8b6};
+inline constexpr Icon sync{0xe627};
+inline constexpr Icon cancel{0xe5c9};
+inline constexpr Icon deleteOutline{0xe92e};
+inline constexpr Icon playCircle{0xe1c4};
+inline constexpr Icon download{0xf090};
 }  // namespace icon
 
 }  // namespace chess::ui

@@ -8,6 +8,28 @@
 
 namespace chess {
 
+StrengthModel strengthModel(int elo) {
+    elo = std::clamp(elo, 400, 3200);
+    StrengthModel m;
+    // Wie weit schaut ein Spieler dieser Staerke voraus? Einsteiger sehen nur den naechsten Zug
+    // (und direkte Schlagabtausche), Vereinsspieler zwei, drei Zuege, Meister deutlich mehr.
+    m.depth = elo < 800    ? 1
+              : elo < 1100 ? 2
+              : elo < 1400 ? 3
+              : elo < 1700 ? 4
+              : elo < 2000 ? 6
+              : elo < 2300 ? 8
+              : elo < 2700 ? 12
+                           : 18;
+    m.candidates = elo < 2400 ? 8 : 4;
+    // Je schwaecher, desto eher wird ein etwas schlechterer Zug fuer "genauso gut" gehalten.
+    // 600: ~190 cp, 1000: ~100, 1400: ~55, 1800: ~30, 2200: ~16, 2600: ~9
+    m.temperature = 260.0 * std::exp(-(elo - 400) / 650.0);
+    // Echte Aussetzer. 600: ~13 %, 1000: ~6 %, 1400: ~3 %, 1800: ~1,4 %, 2200: ~0,7 %
+    m.blunder = 0.18 * std::exp(-(elo - 400) / 550.0);
+    return m;
+}
+
 BotProfile defaultBotProfile() {
     BotProfile p;
     p.id = "standard";
@@ -44,6 +66,8 @@ std::optional<BotProfile> parseBotProfile(const json::Value& v, std::string& err
     auto num = [&](const char* key, double fallback, double lo, double hi) {
         return std::clamp(v.getNumber(key, fallback), lo, hi);
     };
+    p.strength = static_cast<int>(num("strength", p.strength, 0, 3200));
+    if (p.strength > 0) p.strength = std::max(p.strength, 400);
     p.skill = static_cast<int>(num("skill", p.skill, 0, 20));
     p.elo = static_cast<int>(num("elo", p.elo, 0, 4000));
     p.depth = static_cast<int>(num("depth", p.depth, 0, 99));
@@ -132,6 +156,7 @@ std::string botProfileToJson(const BotProfile& p) {
     s += "  \"name\": " + jsonString(p.name) + ",\n";
     s += "  \"description\": " + jsonString(p.description) + ",\n";
     s += std::string("  \"engine\": \"") + engine + "\",\n";
+    s += "  \"strength\": " + num(p.strength) + ",\n";
     s += "  \"skill\": " + num(p.skill) + ",\n";
     s += "  \"elo\": " + num(p.elo) + ",\n";
     s += "  \"depth\": " + num(p.depth) + ",\n";
@@ -253,18 +278,23 @@ Bot::Choice Bot::choose(const Game& game, Engine& engine, const BotContext& ctx)
         return pool[pick(rng_)];
     };
 
+    const bool human = profile_.strength > 0;
+    const StrengthModel model = strengthModel(profile_.strength);
+
     SearchLimits limits;
-    limits.depth = profile_.depth;
+    // Menschliches Modell: nur so weit vorausschauen, wie ein Spieler dieser Staerke es tut
+    limits.depth = human ? model.depth : profile_.depth;
     limits.movetimeMs = profile_.movetimeMs;
     if (ctx.remainingMs >= 0) {
         // Rechenzeit an die Uhr anpassen
         const int budget = std::max(30, ctx.remainingMs / 40 + ctx.incrementMs / 2);
         limits.movetimeMs = limits.movetimeMs > 0 ? std::min(limits.movetimeMs, budget) : budget;
     }
-    limits.multiPv = std::max(1, profile_.candidates);
+    limits.multiPv = std::max(1, human ? std::max(model.candidates, profile_.candidates) : profile_.candidates);
     if (!game.variant().hooks.filterMoves.empty()) limits.rootMoves = legal;  // Plugin-Regeln respektieren
 
-    engine.configureStrength(profile_.skill, profile_.elo);
+    // Im menschlichen Modell rechnet die Engine voll (nur flach); die Schwaeche kommt aus Tiefe und Auswahl
+    engine.configureStrength(human ? 20 : profile_.skill, human ? 0 : profile_.elo);
     const SearchResult res = engine.search(pos, limits);
 
     std::vector<ScoredMove> cands;
@@ -276,6 +306,8 @@ Bot::Choice Bot::choose(const Game& game, Engine& engine, const BotContext& ctx)
         choice.reason = res.ok ? "Keine Bewertung – Engine-Zug" : "Engine-Fehler – Zufallszug";
         return choice;
     }
+
+    if (human) return chooseHuman(pos, legal, cands, model, ctx);
 
     // Anker = der Zug, den die Engine selbst spielen wuerde. Bei begrenzter Staerke (Skill/Elo)
     // ist das nicht unbedingt die beste Linie; staerkere Kandidaten werden dann nicht gewaehlt.
@@ -341,6 +373,74 @@ Bot::Choice Bot::choose(const Game& game, Engine& engine, const BotContext& ctx)
         choice.reason = "Vorsichtige Wahl";
     else
         choice.reason = "Zufällige Variation";
+    return choice;
+}
+
+Bot::Choice Bot::chooseHuman(const Position& pos, const std::vector<Move>& legal, const std::vector<ScoredMove>& cands,
+                             const StrengthModel& model, const BotContext& ctx) {
+    Choice choice;
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+
+    // Aussetzer: Grundwert aus der Elo, plus Profil-Patzer, plus Nervositaet in Zeitnot
+    double blunder = model.blunder + profile_.blunderChance;
+    bool pressure = false;
+    if (ctx.remainingMs >= 0 && ctx.remainingMs < 10000 && profile_.pressureBlunder > 0) {
+        blunder += profile_.pressureBlunder * (1.0 - ctx.remainingMs / 10000.0);
+        pressure = true;
+    }
+    blunder = std::min(1.0, blunder);
+    if (legal.size() > 1 && unit(rng_) < blunder) {
+        // Menschliche Aussetzer sind meist plausible, aber schlechte Zuege – selten voellig wirre.
+        // Darum: aus der schlechteren Haelfte der Kandidaten waehlen, nur manchmal irgendeinen Zug.
+        std::vector<const ScoredMove*> worse;
+        for (size_t i = cands.size() / 2; i < cands.size(); ++i) worse.push_back(&cands[i]);
+        if (worse.empty() || cands.size() < 3 || unit(rng_) < 0.25) {
+            std::vector<Move> pool;
+            for (const Move& m : legal)
+                if (!(m == cands.front().move)) pool.push_back(m);
+            std::uniform_int_distribution<size_t> pick(0, pool.size() - 1);
+            choice.move = pool[pick(rng_)];
+        } else {
+            std::uniform_int_distribution<size_t> pick(0, worse.size() - 1);
+            choice.move = worse[pick(rng_)]->move;
+        }
+        for (const auto& c : cands)
+            if (c.move == choice.move) choice.score = c.score;
+        choice.reason = pressure ? "Fehler in Zeitnot" : "Übersehen";
+        return choice;
+    }
+
+    // Gewichtete Wahl: Zuege nahe am besten sind wahrscheinlich, deutlich schlechtere selten.
+    // Der Stil verschiebt die Bewertung (aggressiv mag Schlaege und Schachs), der Zufall streut.
+    const double t = std::max(1.0, model.temperature + profile_.randomness);
+    std::vector<double> adj;
+    adj.reserve(cands.size());
+    for (const ScoredMove& c : cands) {
+        double bonus = forwardSteps(pos, c.move) * profile_.weights.advance;
+        if (c.move.flags & (FlagCapture | FlagEnPassant)) bonus += profile_.weights.capture;
+        if (givesCheck(pos, c.move)) bonus += profile_.weights.check;
+        adj.push_back(c.score.clamped(3000) + profile_.aggression * bonus);
+    }
+    const double top = *std::max_element(adj.begin(), adj.end());
+    std::vector<double> weights;
+    weights.reserve(adj.size());
+    for (double a : adj) weights.push_back(std::exp((a - top) / t));
+    std::discrete_distribution<size_t> pick(weights.begin(), weights.end());
+    const size_t idx = pick(rng_);
+
+    choice.move = cands[idx].move;
+    choice.score = cands[idx].score;
+    const int loss = cands.front().score.clamped(3000) - cands[idx].score.clamped(3000);
+    if (idx == 0)
+        choice.reason = "Bester Kandidat";
+    else if (loss >= 150)
+        choice.reason = "Übersehen";
+    else if (profile_.aggression > 0.05)
+        choice.reason = "Aggressive Wahl";
+    else if (profile_.aggression < -0.05)
+        choice.reason = "Vorsichtige Wahl";
+    else
+        choice.reason = "Nicht ganz genau";
     return choice;
 }
 

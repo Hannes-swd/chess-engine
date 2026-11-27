@@ -1,0 +1,10 @@
+{
+  "name": "Clubspieler",
+  "description": "Solider Vereinsspieler. Rechnet zwei, drei Züge voraus und nimmt sich Zeit, wenn es kompliziert wird.",
+  "engine": "auto",
+  "strength": 1500,
+  "movetimeMs": 400,
+  "aggression": 0,
+  "pressureBlunder": 0.3,
+  "tempo": { "mode": "human", "minMs": 1000, "maxMs": 7000, "variance": 0.5 }
+}

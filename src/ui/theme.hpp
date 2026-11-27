@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include <string>
+#include <vector>
 
 namespace chess::ui {
 
@@ -29,6 +30,14 @@ public:
     bool hasIcons = false;
 
     const Palette& p() const { return dark ? darkPalette_ : lightPalette_; }
+
+    // Brettfarben zur Auswahl (Index 0 = Salbei, das Hausdesign)
+    struct BoardTheme {
+        const char* name;
+        ImVec4 light, dark;
+    };
+    static const std::vector<BoardTheme>& boardThemes();
+    void setBoard(int index);
 
     // Einmal nach ImGui::CreateContext. iconFont: Material Icons (darf fehlen, dann ohne Icons).
     void loadFonts(const std::string& iconFont = {});

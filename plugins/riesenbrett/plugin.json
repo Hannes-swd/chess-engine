@@ -1,0 +1,7 @@
+{
+  "name": "Riesenbrett 10×10",
+  "description": "Größeres Brett mit zwei neuen Figuren: Drache (Turm + Springer) und Erzbischof (Läufer + Springer).",
+  "author": "ChessEngine",
+  "version": "1.0",
+  "priority": 10
+}

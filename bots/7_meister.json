@@ -1,6 +1,6 @@
 {
   "name": "Meister",
-  "description": "Volle Stockfish-Stärke. Zieht ruhig und sicher, auch in Zeitnot. Keine Gnade.",
+  "description": "Volle Stockfish-Stärke, rechnet tief. Für dich vermutlich unschlagbar – zum Staunen und Lernen.",
   "engine": "auto",
   "skill": 20,
   "depth": 18,

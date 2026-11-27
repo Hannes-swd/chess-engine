@@ -99,6 +99,12 @@ fs::path gamesDir() { return userDir("Partien"); }
 
 fs::path userBotsDir() { return userDir("Bots"); }
 
+fs::path userPluginsDir() { return userDir("Plugins"); }
+
+fs::path trainingFile() { return userDir("Partien").parent_path() / "training.json"; }
+
+fs::path resumeFile() { return userDir("Partien").parent_path() / "fortsetzen.json"; }
+
 fs::path settingsFile() { return userDir("Partien").parent_path() / "einstellungen.json"; }
 
 fs::path profileFile() { return userDir("Partien").parent_path() / "profil.json"; }

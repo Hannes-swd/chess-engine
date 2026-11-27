@@ -21,6 +21,15 @@ std::filesystem::path gamesDir();
 // Eigene/angepasste Bot-Profile: Dokumente\ChessEngine\Bots (wird angelegt).
 std::filesystem::path userBotsDir();
 
+// Eigene Plugins: Dokumente\ChessEngine\Plugins (wird angelegt).
+std::filesystem::path userPluginsDir();
+
+// Dokumente\ChessEngine\training.json (Aufgaben aus eigenen Fehlern, Eroeffnungs-Training)
+std::filesystem::path trainingFile();
+
+// Dokumente\ChessEngine\fortsetzen.json (beim Beenden laufende Partie)
+std::filesystem::path resumeFile();
+
 // Dokumente\ChessEngine\einstellungen.json
 std::filesystem::path settingsFile();
 

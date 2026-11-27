@@ -4,6 +4,7 @@
 |---|---|---|
 | [Dear ImGui](https://github.com/ocornut/imgui) 1.92 (docking) | `third_party/imgui/` | MIT – `third_party/imgui/LICENSE.txt` |
 | [SDL](https://github.com/libsdl-org/SDL) 2.30 | `third_party/SDL2/` | zlib – `third_party/SDL2/LICENSE.txt` |
+| [Lua](https://www.lua.org) 5.4.7 (für Plugins) | `third_party/lua/` | MIT – `third_party/lua/LICENSE` |
 | [Material Icons](https://github.com/google/material-design-icons) | `assets/fonts/` | Apache 2.0 – `assets/fonts/NOTICE.md` |
 
 **Nicht enthalten:**
