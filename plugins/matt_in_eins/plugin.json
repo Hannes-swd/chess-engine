@@ -1,0 +1,7 @@
+{
+  "name": "Matt in 1",
+  "description": "Weiß zieht und setzt matt – es gibt genau einen Zug, der matt setzt, und du hast einen Versuch. 237 Stellungen aus echten Partien: Dame, Turm, Läufer, Springer, Bauer, Grundreihe, Abzug, Umwandlung, ersticktes Matt. Am besten mit Weiß oder zu zweit am Brett spielen.",
+  "author": "ChessEngine",
+  "version": "1.0",
+  "priority": 5
+}

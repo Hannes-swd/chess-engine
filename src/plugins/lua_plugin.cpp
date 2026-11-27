@@ -717,9 +717,12 @@ VariantBuild buildVariant(const std::vector<PluginInfo>& active) {
     if (active.empty()) return b;
 
     auto registry = std::make_shared<PieceRegistry>(*PieceRegistry::standard());
+    // Niedrigste Prioritaet zuerst laden: Was spaeter laedt, gewinnt bei Startstellung, Name und Figuren.
+    // So setzt sich das Plugin mit der hoechsten Prioritaet durch. Die Regel-Hooks laufen davon
+    // unabhaengig nach Prioritaet (hoechste zuerst; bei check_end entscheidet das erste Ergebnis).
     std::vector<PluginInfo> order = active;
     std::stable_sort(order.begin(), order.end(),
-                     [](const PluginInfo& x, const PluginInfo& y) { return x.priority > y.priority; });
+                     [](const PluginInfo& x, const PluginInfo& y) { return x.priority < y.priority; });
     std::vector<std::string> names;
     for (const PluginInfo& info : order) {
         std::string err;
@@ -734,7 +737,8 @@ VariantBuild buildVariant(const std::vector<PluginInfo>& active) {
     b.variant.pieces = registry;
     if (b.variant.name == "Standard" && !names.empty()) {
         b.variant.name.clear();
-        for (const std::string& n : names) b.variant.name += (b.variant.name.empty() ? "" : " + ") + n;
+        for (auto it = names.rbegin(); it != names.rend(); ++it)  // wichtigstes zuerst
+            b.variant.name += (b.variant.name.empty() ? "" : " + ") + *it;
     }
     // Startstellung pruefen: lieber Standardschach als ein kaputtes Brett
     try {

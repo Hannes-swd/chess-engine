@@ -28,7 +28,7 @@ schiefging und was besser gewesen wäre.
 - **PGN-Export und -Import** – jede Partie als Text, mit Bewertungen als Kommentare; gespeicherte Partien (oder PGN aus der Zwischenablage) wieder öffnen und analysieren.
 - **Lua-Plugins** – Brettgröße, neue Figuren (auch mit eigener Zugfunktion), Startaufstellung,
   Zugregeln und Siegbedingungen per Plugin ändern. Abgeschottet: kein Zugriff auf Dateien, System
-  oder Netz. Acht Beispiele liegen bei, darunter ein Start aus zufälligen Mittelspiel-Stellungen, die Anleitung steht in [docs/PLUGINS.md](docs/PLUGINS.md).
+  oder Netz. Neun Beispiele liegen bei, darunter Matt-in-1-Aufgaben und ein Start aus zufälligen Mittelspiel-Stellungen. Aktive Plugins werden per Ziehen sortiert – das obere gewinnt bei Konflikten, die Anleitung steht in [docs/PLUGINS.md](docs/PLUGINS.md).
 
 | Partie gegen einen Bot | Variante durchspielen |
 |---|---|
@@ -80,7 +80,7 @@ Lizenz: [MIT](LICENSE). Eingebundene Bibliotheken behalten ihre eigenen Lizenzen
 | 2. Grafische Oberfläche (SDL2 + Dear ImGui) | ✅ fertig |
 | 3. Speichern & Partieliste | ✅ PGN-Dateien mit Partieliste (SQLite nicht nötig) |
 | 4. Stockfish: Bots + Zuganalyse | ✅ fertig (UCI-Client, eingebaute Engine, 5 Bot-Profile, Analyse) |
-| 5. Lua-Plugins | ✅ fertig (Sandbox, Spiel-API, 8 Beispiele, Plugin-Bereich) |
+| 5. Lua-Plugins | ✅ fertig (Sandbox, Spiel-API, 9 Beispiele, Plugin-Bereich mit Reihenfolge) |
 | 6. Design / Zen-Modus | ✅ Grundlage fertig (Theme hell/dunkel, Zen-Modus) |
 
 ## Bauen (Windows, Visual Studio 2022)

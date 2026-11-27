@@ -135,7 +135,7 @@ TEST_CASE(plugin_on_move_edits_board_and_errors_are_contained) {
 
 TEST_CASE(bundled_plugins_load_and_play) {
     const auto all = discover({CHESS_PLUGINS_DIR});
-    CHECK(all.size() >= 8u);
+    CHECK(all.size() >= 9u);
     for (const PluginInfo& info : all) {
         const VariantBuild b = buildVariant({info});
         CHECK(b.errors.empty());
@@ -207,4 +207,53 @@ TEST_CASE(random_middlegame_plugin_starts_mid_game) {
         CHECK(b.variant.name.rfind("Mittelspiel aus: ", 0) == 0);
         CHECK(usesStandardRules(g));  // Stockfish darf spielen und analysieren
     }
+}
+
+TEST_CASE(mate_in_one_plugin_has_exactly_one_solution) {
+    const auto all = discover({CHESS_PLUGINS_DIR});
+    const PluginInfo* mate = findPlugin(all, "matt_in_eins");
+    CHECK(mate != nullptr);
+    if (!mate) return;
+    for (int i = 0; i < 40; ++i) {
+        const Variant v = buildVariant({*mate}).variant;
+        Game g(v);
+        CHECK(g.position().sideToMove() == Color::White);
+        CHECK(!g.outcome().over());
+        // genau ein Mattzug
+        std::vector<Move> mates, others;
+        for (const Move& m : g.legalMoves()) {
+            Position p = g.position();
+            p.makeMove(m);
+            (p.inCheck(p.sideToMove()) && p.legalMoves().empty() ? mates : others).push_back(m);
+        }
+        CHECK_EQ(mates.size(), size_t{1});
+        if (mates.size() != 1 || others.empty()) continue;
+        // Matt gefunden -> Weiss gewinnt
+        Game win(v);
+        CHECK(win.play(mates.front()));
+        CHECK(win.outcome().result == GameResult::WhiteWins);
+        CHECK(win.outcome().reason.rfind("Matt gefunden", 0) == 0);
+        // anderer Zug -> Aufgabe vorbei, Loesung im Grund
+        Game lose(v);
+        CHECK(lose.play(others.front()));
+        CHECK(lose.outcome().result == GameResult::BlackWins);
+        CHECK(lose.outcome().reason.find("gesucht war") != std::string::npos);
+    }
+}
+
+TEST_CASE(higher_priority_plugin_wins_conflicts) {
+    const auto all = discover({CHESS_PLUGINS_DIR});
+    const PluginInfo* big = findPlugin(all, "riesenbrett");
+    const PluginInfo* mid = findPlugin(all, "zufallsmittelspiel");
+    CHECK(big && mid);
+    if (!big || !mid) return;
+    // Beide wollen die Startstellung festlegen: das Plugin mit der hoeheren Prioritaet setzt sich durch
+    PluginInfo a = *big, b = *mid;
+    a.priority = 990, b.priority = 980;
+    Game g1(buildVariant({b, a}).variant);
+    CHECK_EQ(g1.position().width(), 10);
+    a.priority = 980, b.priority = 990;
+    Game g2(buildVariant({a, b}).variant);
+    CHECK_EQ(g2.position().width(), 8);
+    CHECK(g2.startPosition().fullmoveNumber() >= 10);
 }

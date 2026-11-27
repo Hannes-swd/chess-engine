@@ -90,7 +90,8 @@ private:
     PieceRegistry* loadRegistry_ = nullptr;
 };
 
-// Baut Standardschach + die angegebenen Plugins (in Prioritaets-Reihenfolge) zu einer Variante zusammen.
+// Baut Standardschach + die angegebenen Plugins zu einer Variante zusammen. Hoehere priority gewinnt:
+// ihr on_load laeuft zuletzt (Startstellung/Name/Figuren setzen sich durch), ihre Hooks laufen zuerst.
 struct VariantBuild {
     Variant variant;
     std::vector<std::shared_ptr<LuaPlugin>> loaded;

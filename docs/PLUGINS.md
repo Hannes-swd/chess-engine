@@ -31,7 +31,11 @@ sich die Datei `.beispiele`).
 }
 ```
 
-`priority` legt die Reihenfolge fest, wenn mehrere Plugins aktiv sind: höhere Werte laufen zuerst.
+Welche Plugins aktiv sind und in welcher Reihenfolge, bestimmst du im Bereich **Plugins**: links
+„Verfügbar“, rechts „Aktiv“. Ein Plugin wird per Ziehen (oder Doppelklick) aktiviert; in „Aktiv“ sortierst
+du es per Ziehen. **Oben steht das wichtigste**: Wollen zwei Plugins dasselbe festlegen (Startstellung, Name,
+eine Figur), gewinnt das obere; seine Regel-Hooks laufen zuerst, und bei `check_end` zählt das erste Ergebnis.
+`priority` in plugin.json wird dafür nicht mehr gebraucht.
 
 ### main.lua
 
@@ -119,6 +123,8 @@ Standard-ids: `pawn`, `knight`, `bishop`, `rook`, `queen`, `king`.
 | `board:in_check(color)` | steht diese Farbe im Schach? |
 | `board:attacked(x, y, color)` | greift `color` das Feld an? |
 | `board:fen()` | Stellung als FEN |
+| `board:legal_moves()` | alle erlaubten Züge der Seite am Zug, jeweils mit `san` (z. B. `"Qg7#"`) |
+| `board:checkmate()` | steht die Seite am Zug matt? |
 | `board:set(x, y, id, color)` | Figur setzen ¹ |
 | `board:clear(x, y)` | Feld leeren ¹ |
 | `board:resize(w, h)` | Brettgröße ändern, leert das Brett ¹ |
@@ -178,6 +184,7 @@ Verfügbar sind `string`, `table`, `math` und `utf8` aus der Lua-Standardbibliot
 | `amazone` | Figur aus zwei Zugmustern |
 | `grashuepfer` | Figur mit eigener Zugfunktion in Lua |
 | `zufallsaufstellung` | zufällige Startstellung bei jeder Partie |
+| `matt_in_eins` | Aufgaben: genau ein Mattzug, ein Versuch (nutzt `board:checkmate()`) |
 | `zufallsmittelspiel` | Start mitten in der Partie: eine von 93 ausgeglichenen Stellungen aus bekannten Eröffnungen |
 | `koenigshuegel` | zusätzliche Siegbedingung |
 | `schlagzwang` | Züge filtern |

@@ -14,6 +14,11 @@ namespace chess::ui {
 
 namespace {
 
+ImVec4 alpha(ImVec4 c, float a) {
+    c.w = a;
+    return c;
+}
+
 bool contains(const std::vector<std::string>& list, const std::string& id) {
     return std::find(list.begin(), list.end(), id) != list.end();
 }
@@ -74,9 +79,14 @@ Variant GuiApp::currentVariant() {
     gamePlugins_.clear();
     pluginErrors_.clear();
     pluginGame_ = false;
+    // Reihenfolge wie in der Spalte "Aktiv": oben = hoechste Prioritaet
     std::vector<plugins::PluginInfo> active;
-    for (const auto& p : plugins_)
-        if (contains(settings_.plugins, p.id)) active.push_back(p);
+    for (const std::string& id : settings_.plugins)
+        for (const auto& p : plugins_)
+            if (p.id == id) {
+                active.push_back(p);
+                active.back().priority = 1000 - static_cast<int>(active.size()) * 10;
+            }
     if (active.empty()) return standardVariant();
 
     plugins::VariantBuild b = plugins::buildVariant(active);
@@ -98,51 +108,164 @@ void GuiApp::panelPlugins() {
                        "Sie gelten ab der nächsten neuen Partie. Partien mit Plugins werden nicht gewertet.");
     ImGui::PopTextWrapPos();
 
-    sectionTitle("Verfügbar");
+    // --- Zwei Spalten: verfuegbar | aktiv. Ziehen verschiebt, Reihenfolge in "Aktiv" = Prioritaet ---
     {
+        ImGui::Dummy(ImVec2(0, 2 * s));
         const float btn = 22.0f * s + 2 * ImGui::GetStyle().FramePadding.y;
-        ImGui::SameLine(ImGui::GetContentRegionMax().x - 2 * btn - 4 * s);
+        ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - 2 * btn - 4 * s);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
         if (iconButton("##plreload", icon::sync, "Plugins neu einlesen")) {
             reloadPlugins();
             setStatus(std::to_string(plugins_.size()) + " Plugins gefunden");
         }
         ImGui::SameLine(0, 4 * s);
-        if (iconButton("##plfolder", icon::folder, "Ordner für eigene Plugins öffnen")) openFolder(env::userPluginsDir());
+        if (iconButton("##plfolder", icon::folder, "Plugin-Ordner öffnen")) openFolder(env::userPluginsDir());
         ImGui::PopStyleColor();
     }
-
     if (plugins_.empty()) ImGui::TextColored(c.textMuted, "Der Plugin-Ordner ist leer.");
-    bool changed = false;
-    for (const auto& p : plugins_) {
-        bool on = contains(settings_.plugins, p.id);
-        std::string help;
-        if (!p.author.empty() || !p.version.empty())
-            help += std::string(p.version.empty() ? "" : "Version " + p.version) +
-                    (p.author.empty() ? "" : (p.version.empty() ? "von " : ", von ") + p.author);
-        ImGui::PushID(p.id.c_str());
-        if (toggleRow(p.name.c_str(), &on, help.c_str())) {
-            if (on)
-                settings_.plugins.push_back(p.id);
-            else
-                std::erase(settings_.plugins, p.id);
-            changed = true;
-        }
-        ImGui::PopID();
-        // Beschreibung sichtbar unter dem Namen, nicht nur als Tooltip
-        if (!p.description.empty()) {
-            ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + 8 * s, ImGui::GetCursorPosY() - 10 * s));
-            ImGui::PushTextWrapPos(ImGui::GetContentRegionMax().x - 60 * s);
-            ImGui::PushFont(nullptr, 15.0f);
-            ImGui::TextColored(c.textMuted, "%s", p.description.c_str());
-            ImGui::PopFont();
-            ImGui::PopTextWrapPos();
-            ImGui::Dummy(ImVec2(0, 4 * s));
-        }
-        if (!p.error.empty()) ImGui::TextColored(c.qBlunder, "%s", p.error.c_str());
-    }
-    if (changed) saveSettings();
 
+    bool changed = false;
+    const auto find = [&](const std::string& id) -> const plugins::PluginInfo* {
+        for (const auto& p : plugins_)
+            if (p.id == id) return &p;
+        return nullptr;
+    };
+    std::vector<const plugins::PluginInfo*> available, active;
+    for (const std::string& id : settings_.plugins)
+        if (const auto* p = find(id)) active.push_back(p);
+    for (const auto& p : plugins_)
+        if (!contains(settings_.plugins, p.id)) available.push_back(&p);
+
+    const float gap = 10 * s;
+    const float colW = (ImGui::GetContentRegionAvail().x - gap) * 0.5f;
+    const float rowGap = 6 * s, pad = 7 * s, grip = 13 * s, fs = 15 * s;
+    const ImVec2 colPad(6 * s, 8 * s);
+    ImFont* sf = theme_.strong ? theme_.strong : ImGui::GetFont();
+    auto rowHeight = [&](const plugins::PluginInfo& p, float w) {
+        return sf->CalcTextSizeA(fs, FLT_MAX, w - 2 * pad - grip, p.name.c_str()).y + 2 * pad;
+    };
+    // Hoehe: so viel, dass beide Spalten ganz sichtbar sind (gleiche Breite wie beim Zeichnen)
+    const float innerW = colW - 2 * colPad.x;
+    float colH = 0;
+    for (const auto* list : {&available, &active}) {
+        float h = 0;
+        for (const auto* p : *list) h += rowHeight(*p, innerW) + rowGap + ImGui::GetStyle().ItemSpacing.y;
+        colH = std::max(colH, h);
+    }
+    colH = std::max(colH + ImGui::GetTextLineHeightWithSpacing() + 2 * colPad.y + 26 * s,
+                    160 * s);
+
+    std::string moveId;  // was in diesem Frame verschoben wurde
+    int moveTo = -2;     // -1 = deaktivieren, sonst Position in "Aktiv"
+
+    auto column = [&](const char* id, const char* title, const char* hint, std::vector<const plugins::PluginInfo*>& list,
+                      bool isActive) {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, alpha(c.surfaceRaised, isActive ? 0.55f : 0.3f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8 * s);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, colPad);
+        ImGui::BeginChild(id, ImVec2(colW, colH), ImGuiChildFlags_AlwaysUseWindowPadding);
+        ImGui::PushFont(theme_.strong, 15.0f);
+        ImGui::TextColored(isActive ? c.accent : c.textMuted, "%s", title);
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, 2 * s));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float w = ImGui::GetContentRegionAvail().x;
+        for (size_t i = 0; i < list.size(); ++i) {
+            const auto& p = *list[i];
+            const float h = rowHeight(p, w);
+            const ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImGui::PushID(p.id.c_str());
+            ImGui::InvisibleButton("##pl", ImVec2(w, h));
+            const bool hovered = ImGui::IsItemHovered();
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                moveId = p.id;
+                moveTo = isActive ? -1 : static_cast<int>(active.size());
+            }
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip)) {
+                ImGui::SetDragDropPayload("PLUGIN", p.id.c_str(), p.id.size() + 1);
+                ImGui::EndDragDropSource();
+            }
+            // In "Aktiv" auf eine Zeile fallen lassen: davor einordnen
+            if (isActive && ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("PLUGIN")) {
+                    moveId = static_cast<const char*>(pl->Data);
+                    moveTo = static_cast<int>(i);
+                }
+                ImGui::EndDragDropTarget();
+            }
+            const bool dragging = ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left);
+            if (hovered && !ImGui::GetDragDropPayload() && !p.description.empty()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24);
+                ImGui::TextUnformatted(p.description.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+            ImGui::PopID();
+            ImGui::Dummy(ImVec2(0, rowGap - ImGui::GetStyle().ItemSpacing.y));
+
+            const ImVec2 p1(p0.x + w, p0.y + h);
+            dl->AddRectFilled(p0, p1, Theme::u32(dragging ? alpha(c.accent, 0.25f) : hovered ? c.surfaceRaised : c.surface),
+                              6 * s);
+            dl->AddRect(p0, p1, Theme::u32(isActive ? alpha(c.accent, 0.45f) : c.border), 6 * s);
+            // Griff (sechs Punkte) zeigt: ziehbar
+            for (int gy = 0; gy < 3; ++gy)
+                for (int gx = 0; gx < 2; ++gx)
+                    dl->AddCircleFilled(ImVec2(p0.x + pad - 1 * s + gx * 4 * s, p0.y + h * 0.5f + (gy - 1) * 4.5f * s), 1.2f * s,
+                                        Theme::u32(c.textMuted, 0.7f));
+            // In "Aktiv" die Rangfolge
+            std::string label = p.name;
+            if (isActive) label = std::to_string(i + 1) + ". " + label;
+            dl->AddText(sf, fs, ImVec2(p0.x + pad + grip, p0.y + pad), Theme::u32(p.error.empty() ? c.text : c.qBlunder),
+                        label.c_str(), nullptr, w - 2 * pad - grip);
+            // Linie, wo die gezogene Mod landen wuerde
+            if (isActive && ImGui::GetDragDropPayload() && ImGui::IsMouseHoveringRect(p0, p1))
+                dl->AddLine(ImVec2(p0.x, p0.y - rowGap * 0.5f), ImVec2(p1.x, p0.y - rowGap * 0.5f), Theme::u32(c.accent),
+                            2.5f * s);
+        }
+        if (list.empty()) {
+            ImGui::PushTextWrapPos(0);
+            ImGui::TextColored(alpha(c.textMuted, 0.8f), "%s", hint);
+            ImGui::PopTextWrapPos();
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+        // Ganze Spalte als Ziel: in "Aktiv" ans Ende, in "Verfuegbar" = abschalten
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("PLUGIN")) {
+                moveId = static_cast<const char*>(pl->Data);
+                moveTo = isActive ? static_cast<int>(active.size()) : -1;
+            }
+            ImGui::EndDragDropTarget();
+        }
+    };
+    column("##plavail", "Verfügbar", "Alle Plugins sind aktiv.", available, false);
+    ImGui::SameLine(0, gap);
+    column("##plactive", "Aktiv – oben zuerst", "Plugins hierher ziehen (oder doppelklicken).", active, true);
+
+    if (!moveId.empty() && moveTo != -2) {
+        std::vector<std::string>& order = settings_.plugins;
+        const auto old = std::find(order.begin(), order.end(), moveId);
+        int target = moveTo;
+        if (old != order.end()) {
+            const int oldIndex = static_cast<int>(old - order.begin());
+            order.erase(old);
+            if (target > oldIndex) --target;  // beim Verschieben nach unten rueckt alles eins hoch
+        }
+        if (target >= 0) order.insert(order.begin() + std::clamp(target, 0, static_cast<int>(order.size())), moveId);
+        changed = true;
+    }
+    ImGui::PushTextWrapPos(0);
+    ImGui::PushFont(nullptr, 14.5f);
+    ImGui::TextColored(c.textMuted, "%s",
+                       "Ziehen zum Ein- und Ausschalten, in „Aktiv“ ziehen zum Sortieren. Wollen zwei Plugins "
+                       "dasselbe (z. B. die Startstellung), gewinnt das obere.");
+    ImGui::PopFont();
+    ImGui::PopTextWrapPos();
+    for (const auto& p : plugins_)
+        if (!p.error.empty()) ImGui::TextColored(c.qBlunder, "%s: %s", p.name.c_str(), p.error.c_str());
+    if (changed) saveSettings();
     // --- Neue Partie mit der Auswahl ----------------------------------------------------
     ImGui::Dummy(ImVec2(0, 8 * s));
     ImGui::PushFont(theme_.strong, 0.0f);

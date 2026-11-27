@@ -762,8 +762,8 @@ void GuiApp::playMoves() {
         ImGui::Dummy(ImVec2(0, 10 * s));
         ImGui::PushTextWrapPos(0);
         const char* first = game_.startPosition().fullmoveNumber() > 1
-                                ? "Die Partie beginnt mitten im Spiel. Verschaff dir einen Überblick: Wo stehen die "
-                                  "Figuren, was droht, was ist dein Plan?"
+                                ? "Die Partie beginnt in einer vorgegebenen Stellung. Schau sie dir in Ruhe an: Wo "
+                                  "stehen die Figuren, was droht, welcher Zug passt?"
                             : bot_ ? "Mach den ersten Zug – oder warte auf den Bot."
                                    : "Zieh eine Figur, um die Partie zu beginnen.";
         ImGui::TextColored(c.textMuted, "%s", first);

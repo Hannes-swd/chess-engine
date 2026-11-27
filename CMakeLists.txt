@@ -156,7 +156,6 @@ add_executable(chess_tests
     tests/rating_tests.cpp
     tests/plugin_tests.cpp
     tests/training_tests.cpp
-    tests/zz_gen_mates.cpp
 )
 target_link_libraries(chess_tests PRIVATE chess_plugins)
 chess_warnings(chess_tests)
